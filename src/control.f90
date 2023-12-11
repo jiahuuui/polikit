@@ -1,19 +1,22 @@
-module control
-    use precision
-    use topo_analysis
-    use tct
-    use io
-    implicit none
+PROGRAM MAIN
+    IMPLICIT NONE
 
-contains
+CONTAINS
 
-SUBROUTINE
-    implicit none
-    type particle
+SUBROUTINE test
+    IMPLICIT NONE
+    type linkedl(na)
+        integer(4), len :: na
+        real, dimension(na) :: list
+        type(linkedl(na)), pointer :: next
+    end type linkedl
 
-    end type
+    type(linkedl(100)), pointer :: head=>null()
+    type(linkedl(100)), pointer :: tail=>null()
+    type(linkedl(100)), pointer :: tmp=>null()
 
-
+    print *, associated(head)
+    print *, associated(tail)
+    print *, associated(tmp)
 END SUBROUTINE
-
-end module
+END PROGRAM

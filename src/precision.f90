@@ -1,6 +1,7 @@
 MODULE precision
     IMPLICIT NONE
     save
+    public
     integer, parameter :: dp = 4
 !     integer, parameter :: dp = selected_real_kind(15, 307)
     integer :: ierr
@@ -12,7 +13,7 @@ subroutine bubble_sort(last,array)
     implicit none
     ! last is the position of last element in array.
     integer(4), intent(inout) :: array(:) !length should match the main subroutine
-    integer(4),intent(in) :: last
+    integer(4), intent(in) :: last
     integer(4) :: temp, i, j, k
 
     do i=last-1,1,-1

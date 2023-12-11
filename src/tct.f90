@@ -1,20 +1,18 @@
 module tct
   use precision
   use io, n_atom => natom
-  use neigh_finder, vectors => delta
+  use nf
   implicit none
   save
-  real(dp) :: bond_length(n_atom,10,20),bond_angle(n_atom,30,20)
-  integer(4) :: length_header(n_atom,10),angle_header(n_atom,30,2), counter(n_atom,10,2)
-  real(dp) :: constrain(n_atom,2)
-
-
+  public
+  real(dp), allocatable :: constrain(:,:)
+  
   contains
 
 subroutine tct_calculate
 ! Constraint is calculated as follow:
 ! 1. For each atom, 2 lists are created for bond lengths and bond angles correspond
-!   to it. It is a n*20 list for each atom, 20 is the number of frames will be
+!   to it. It is a n*ndev list for each atom, ndev is the number of frames will be
 !   used to calculate standard deviation.
 ! 2. When having enough data, which means a bond is stable and unbroken for enough
 !   time, standard deviation of its corralated angles are calculated.
@@ -24,16 +22,30 @@ subroutine tct_calculate
   implicit none
 
   integer(4) :: i,j,k,l,topa,topb,tm,tm_list(10)
+  integer(4) :: ndev=20  ! frame number to calculate a statistical result
+  real(dp) :: thv=15.   ! threshold value for constraint determine
   real(dp) :: tct,angle,length
   real(dp), parameter :: pi = 3.141592653589793 ,r2d = 180.0/pi
 
-  call neigh_finder_d
+  real(dp), allocatable :: bond_length(:,:,:), bond_angle(:,:,:)
+  integer(4), allocatable :: length_header(:,:), angle_header(:,:,:), counter(:,:,:)
+
+
+  call neighbor_finder_d
+
+  allocate(bond_length(n_atom,10,ndev))
+  allocate(bond_angle(n_atom,30,ndev))
+  allocate(length_header(n_atom,10))
+  allocate(angle_header(n_atom,30,2))
+  allocate(counter(n_atom,10,2))
+
+  allocate(constrain(n_atom,2))
 
   do i =1, n_atom
-    bond_length(i,:,2:20)=bond_length(i,:,:19)  !move bond_length
-    bond_angle(i,:,2:20)=bond_angle(i,:,:19)  !move bond angle
+    bond_length(i,:,2:ndev)=bond_length(i,:,:ndev-1)  !move bond_length
+    bond_angle(i,:,2:ndev)=bond_angle(i,:,:ndev-1)  !move bond angle
     do j=1,10
-      if (counter(i,j,2)/=20) then
+      if (counter(i,j,2)/=ndev) then
         counter(i,j,1)=0
       endif
       if (counter(i,j,2)>0) then
@@ -77,12 +89,12 @@ subroutine tct_calculate
     enddo
 
     do j = 1,n_neighbor(i)
-      length = norm2(vectors(i,j,:))
+      length = norm2(delta(i,j,:))
       do l = 1,10
         if (neighbor(i,j)==length_header(i,l)) then
           bond_length(i,l,1)=length
           counter(i,l,1)=counter(i,l,1)+1
-          counter(i,l,2)=20
+          counter(i,l,2)=ndev
           exit  !exit if this bond length is stored
         elseif (neighbor(i,j)<length_header(i,l)) then
           length_header(i,l+1:)=length_header(i,l:-1)
@@ -91,14 +103,14 @@ subroutine tct_calculate
           bond_length(i,l,1)=length
           counter(i,l+1:,:)=counter(i,l:-1,:)
           counter(i,l,1)=1
-          counter(i,l,2)=20
+          counter(i,l,2)=ndev
           exit
         elseif (length_header(i,l)==0) then
           length_header(i,l+1:)=length_header(i,l:-1)
           length_header(i,l)=neighbor(i,j)
           bond_length(i,l,1)=length
           counter(i,l,1)=counter(i,l,1)+1
-          counter(i,l,2)=20
+          counter(i,l,2)=ndev
           exit
         endif
         if (l==10) then
@@ -108,9 +120,9 @@ subroutine tct_calculate
       do l = j+1,n_neighbor(i)
         topa=neighbor(i,j)
         topb=neighbor(i,l)
-        angle= r2d*acos((vectors(i,j,1)*vectors(i,l,1)+vectors(i,j,2)*&
-        &vectors(i,l,2)+vectors(i,j,3)*vectors(i,l,3))/(norm2(vectors(i,j,:))*&
-        &norm2(vectors(i,l,:))))
+        angle= r2d*acos((delta(i,j,1)*delta(i,l,1)+delta(i,j,2)*&
+        &delta(i,l,2)+delta(i,j,3)*delta(i,l,3))/(norm2(delta(i,j,:))*&
+        &norm2(delta(i,l,:))))
 
         do k = 1,30
           if (topa==angle_header(i,k,1) .and. topb==angle_header(i,k,2)) then
@@ -156,7 +168,7 @@ subroutine tct_calculate
     tm=0
     tm_list=0
     do j=1,10
-      if (counter(i,j,1)>=20 .and. counter(i,j,2)==20) then
+      if (counter(i,j,1)>=ndev .and. counter(i,j,2)==ndev) then
         tm=tm+1
         tm_list(tm)=length_header(i,j)
         !stddva of bond length
@@ -165,12 +177,12 @@ subroutine tct_calculate
           constrain(i,1) = constrain(i,1)+1.
         endif
         do l=j+1,10
-          if (counter(i,l,1)>=20 .and. counter(i,l,2)==20) then
+          if (counter(i,l,1)>=ndev .and. counter(i,l,2)==ndev) then
             do k=1,30
               if (angle_header(i,k,1)==length_header(i,j) .and. &
               &angle_header(i,k,2)==length_header(i,l)) then
                 tct = stddev(bond_angle(i,k,:))
-                if (tct<15.) then
+                if (tct<thv) then   !here is the threshold value that need to be modified
                   constrain(i,2) = constrain(i,2)+1.
                 endif
                 exit
@@ -188,7 +200,13 @@ subroutine tct_calculate
   enddo
 
   ! print *, bond_length(886315,2,:)
-  ! print *, vectors(886315,2,:)
+  ! print *, delta(886315,2,:)
+
+  deallocate(bond_length)
+  deallocate(bond_angle)
+  deallocate(length_header)
+  deallocate(angle_header)
+  deallocate(counter)
 
   return
   contains
@@ -209,7 +227,7 @@ subroutine tct_calculate
   end function stddev
 
   function angle2ncbb(angle_number)
-    ! a step function to get ncbb from stable angle number, can be a little bit ambigious.
+    ! a step function to get ncbb from stable angle number, is a little bit ambigious.
     implicit none
     real(dp), intent(in) :: angle_number
     real(dp) :: angle2ncbb

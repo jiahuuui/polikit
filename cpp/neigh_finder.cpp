@@ -2,6 +2,8 @@
 #include <vector>
 #include <cmath>
 
+using namespace std;
+
 struct bins {
     int n;
     std::vector<int> n_list;
@@ -36,8 +38,9 @@ void neighbor_finder_d(double* xyz0, int atom_number, double lx, double ly, doub
     ybin_max = std::ceil(ly / cutoff) - 1;
     zbin_max = std::ceil(lz / cutoff) - 1;
 
-    std::vector<std::vector<std::vector<bins>>> cellbins(xbin_max + 2,
-        std::vector<std::vector<bins>>(ybin_max + 2, std::vector<bins>(zbin_max + 2)));
+    vector<bins>*** cellbins(xbin_max + 2, ybin_max+2, zbin_max+2);
+    // std::vector<std::vector<std::vector<bins>>> cellbins(xbin_max + 2,
+        // std::vector<std::vector<bins>>(ybin_max + 2, std::vector<bins>(zbin_max + 2)));
 
     for (int j = 0; j < xbin_max + 2; j++) {
         for (int i = 0; i < ybin_max + 2; i++) {
@@ -180,6 +183,7 @@ void neighbor_finder_d(double* xyz0, int atom_number, double lx, double ly, doub
     // Sorting neighbor lists here (implement bubble_sort function)
     for (int i = 0; i < atom_number; i++) {
         // Implement bubble_sort for neighbor[i]
+
     }
 
     // Print statements are commented out; you can uncomment them for debugging

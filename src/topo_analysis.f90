@@ -5,16 +5,16 @@
 module topo_analysis
   use precision
   use io
-  use neigh_finder, ref_n => n_neighbor, ref_list => neighbor
+  use nf
   implicit none
   save
+  public
   type polyhedron
     integer(4) :: nei, neilist(20)
   end type
 
   type(polyhedron), allocatable :: poly(:)
-  integer(4), allocatable :: poly_n(:), poly_list(:,:), ln(:)
-
+  integer(4), target, allocatable :: ln(:)
 contains
 
 SUBROUTINE poly_neighbor
@@ -28,27 +28,29 @@ SUBROUTINE poly_neighbor
   !!!!!!!!!!!!!!!!!!
   IMPLICIT NONE
   integer(4) :: m,n,i,j,k
+  integer(4), pointer :: ref_n(:), ref_list(:,:)
+  print *, 'Entering polyhedral analysis subroutine ...'
 
   call neighbor_finder   ! and get_xyz is called in neighbor_finder
-
+  ref_n => n_neighbor
+  ref_list => neighbor
 
   allocate(poly(natom), STAT=ierr, ERRMSG=emsg)
   allocate(ln(natom), STAT=ierr, ERRMSG=emsg)
 
   ln = 0
   forall (n=1: natom)
-!   print *, n
     poly(n)%nei = 0
     poly(n)%neilist = 0
   end forall
 
   do i = 1,natom
-!     print *, i
+
     if (ptype(i)==o_type) cycle   !oxygen is not center atom
     do n=1, ref_n(i)
       if (ptype(ref_list(i,n))==o_type) then
         do m=1, ref_n(ref_list(i,n))
-          if (ptype(ref_list(ref_list(i,n),m))==x_type .and. ref_list(ref_list(i,n),m)/=i) then
+          if (ptype(ref_list(ref_list(i,n),m))/=o_type .and. ref_list(ref_list(i,n),m)/=i) then
             k=1
             do
               if (poly(i)%nei==0) then
@@ -77,36 +79,38 @@ SUBROUTINE poly_neighbor
 
   enddo
 
-! print *, "poly neighbor constructed."
-ln = 0
-do i = 1,natom
+  ! print *, "poly neighbor constructed."
+  ln = 0
+  do i = 1,natom
 
-  if (poly(i)%nei/=0) then
-    do j =1, poly(i)%nei
-      k=0
-      m=1
-      n=1
-     do while(m <= ref_n(i) .and. n <= ref_n(poly(i)%neilist(j)) )
-!       print *, m, n
-          if (ref_list(i,m) > ref_list(poly(i)%neilist(j),n)) then
-             n = n + 1
-          else if (ref_list(i,m) < ref_list(poly(i)%neilist(j),n)) then
-             m = m + 1
-          else if (ref_list(i,m) == ref_list(poly(i)%neilist(j),n)) then
-             m = m + 1
-             n = n + 1
-             k=k+1
-          endif
+    if (poly(i)%nei/=0) then
+      do j =1, poly(i)%nei
+        k=0
+        m=1
+        n=1
+      do while(m <= ref_n(i) .and. n <= ref_n(poly(i)%neilist(j)) )
+  !       print *, m, n
+            if (ref_list(i,m) > ref_list(poly(i)%neilist(j),n)) then
+              n = n + 1
+            else if (ref_list(i,m) < ref_list(poly(i)%neilist(j),n)) then
+              m = m + 1
+            else if (ref_list(i,m) == ref_list(poly(i)%neilist(j),n)) then
+              m = m + 1
+              n = n + 1
+              k=k+1
+            endif
+        enddo
+
+        if (ln(i)<k) then
+          ln(i)=k
+        endif
       enddo
+    endif
+  enddo
 
-      if (ln(i)<k) then
-        ln(i)=k
-      endif
-    enddo
-  endif
-enddo
-
-  print *, 'polyhedra neighbor analysis -- done'
+    print *, "      CS       ES       FS"
+    print *, count(ln==1), "   ",count(ln==2),"    ",count(ln==3)
+    print *, 'Leaving polyhedral analysis subroutine, polyhedra neighbor analysis -- done'
   return
 END SUBROUTINE poly_neighbor
 
@@ -250,13 +254,14 @@ enddo
 
 end subroutine neighbor_change_ipr
 
-subroutine ln_analysis(natom,new_ln,ref_ln,nc,out)
 !!!!!!!!
 ! This subroutine compares ln at one frame and a reference frame and conclude
-! whether the polyhedron changed its ln. (a bit ambiguous because unlike coordination change, no changing direction is specified.)
+! whether the polyhedron changed its ln. (a bit ambiguous because unlike coordination change,
+! no changing direction is specified.)
 !!!!!!!!
+subroutine ln_change(natom,new_ln,ref_ln,out)
 implicit none
-integer(4),intent(in) :: natom,new_ln(natom),ref_ln(natom),nc(natom)
+integer(4),intent(in) :: natom,new_ln(natom),ref_ln(natom)
 integer(4),intent(out) :: out(natom,4)
 integer(4) :: i
 ! print *, nc(:100)
@@ -265,27 +270,28 @@ out=0
 
 do i=1,natom
   if (ref_ln(i)==1 .and. new_ln(i)==1) then
-    out(i,1)=out(i,1)+nc(i)
+    out(i,1)=out(i,1)+1
   elseif (ref_ln(i)==1 .and. new_ln(i)==2) then
-    out(i,2)=out(i,2)+nc(i)
+    out(i,2)=out(i,2)+1
   elseif (ref_ln(i)==2 .and. new_ln(i)==1) then
-    out(i,3)=out(i,3)+nc(i)
+    out(i,3)=out(i,3)+1
   elseif (ref_ln(i)==2 .and. new_ln(i)==2) then
-    out(i,4)=out(i,4)+nc(i)
+    out(i,4)=out(i,4)+1
   endif
 
 enddo
 
 return
-end subroutine ln_analysis
+end subroutine ln_change
 
-subroutine classify(natom, out_length, old_n, new_n, old_list, new_list,&
-    & n_increase, n_decrease, n_change, n_start, n_end, cn_out)
+! this subroutine classify neighbor change event into increased, decreased, and
+! unchanged but different neighbors.
+subroutine classify(natom, old_n, new_n, old_list, new_list,&
+    & n_increase, n_decrease, n_change)
     implicit none
-    integer, parameter :: dp = selected_real_kind(15, 307)
-    integer(4), intent(in) :: natom, out_length, old_n(natom), new_n(natom),&
-            &old_list(natom,10), new_list(natom,10), n_start, n_end
-    integer(4), intent(out) :: cn_out(out_length)
+    integer(4), intent(in) :: natom, old_n(natom), new_n(natom),&
+            &old_list(natom,10), new_list(natom,10)
+!     integer(4), intent(out) :: cn_out(out_length)
     ! integer(4), intent(in) :: old_list(_n), new_list(new_n)
     integer(4), intent(inout) :: n_increase, n_decrease, n_change
     integer(4) :: i, j
@@ -302,16 +308,8 @@ do j = 1, natom
             endif
         enddo
     endif
-    do i = n_start, n_end
-      if (new_n(j) == i) then
-        cn_out(i-n_start+1) = cn_out(i-n_start+1) + 1
-        exit
-      endif
-    enddo
 enddo
     return
 end subroutine classify
-
-
 
 end module topo_analysis
