@@ -5,10 +5,18 @@ OBJS = nf.o topo_analysis.o precision.o io.o tct.o
 FORTRAN = gfortran
 CFLAGS = -c
 
-a.exe: $(OBJS) polikit.f90
-	$(FORTRAN) polikit.f90 $(OBJS) -o a.exe -fcheck='all'
+polikit: $(OBJS) polikit.f90
+	$(FORTRAN) $^ $(OBJS) -o polikit -fcheck='all'
+precision.o:precision.f90
+	$(FORTRAN) $^ $(CFLAGS)
+io.o:io.f90
+	$(FORTRAN) $^ $(CFLAGS)
+nf.o:nf.f90
+	$(FORTRAN) $^ $(CFLAGS)
 %.o:%.f90
 	$(FORTRAN) $^ $(CFLAGS)
+# %.o:%.f90
+# 	$(FORTRAN) $^ $(CFLAGS)
 .PHONY: clean
 clean:
 	rm *.o *.mod

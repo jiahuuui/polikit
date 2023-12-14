@@ -40,6 +40,21 @@ However the simplist breadth-first algorithm is super computing power expensive.
 - find shortest path around a center atom
 - check if an atom is in a pair of prime-mid-node
 
+#### to Kai
+Hello Kai,
+
+Hope this email finds your well!
+
+It has been nearly a year since I physically left our lab. I worked intensively with Antti this year to summarize my work and get ready for the doctoral defence. Hopefully I can get prepared for it in near future.
+
+Without your introduction I would never have the chance to join our lab, I really feel grateful for it. In past years your attitude towards research always inspires me. Regarding my own research, we finished the project with many influential publications, including one publication on Advanced Materials and one on Acta Materialia which I made major contribution.
+
+I found during my phd that my interest is still scientific research. More specifically, interested in topics include radiation effect in semiconductor materials such as gallium oxide. Therefore, I am wondering if it is possible to ask for a recommendation letter from you.
+
+Happy holidays,
+Jiahui
+
+
 <!-- 
 ### Heading
 # H1
