@@ -807,4 +807,55 @@ ck: do m = 1, k-1
     deallocate(elem)
 END FUNCTION check_shortcut
 
+SUBROUTINE rm_not_pr(ringlist)
+    IMPLICIT NONE
+    ! INOUT:
+    type(ring), intent(inout), allocatable, dimension(:) :: ringlist
+    ! PRIVATE:
+    integer(inp) :: rsize, nring
+    logical, allocatable, dimension(:) :: pr
+    type(ring), dimension(:), allocatable :: tmplist
+
+    rsize = size(ringlist)
+    allocate(pr(rsize))
+
+    pr = .true.
+    ! print *, lbound(pr), ubound(pr), rsize
+    do nring = 1, rsize
+
+        pr(nring) = checkShortCut(ringlist(nring))
+!         print *, nring, pr(nring)
+    end do
+
+    if (any(pr .eqv. .false.)) then
+        allocate(tmplist, source = ringlist(trueloc(pr)))
+        deallocate(ringlist)
+        deallocate(pr)
+        call move_alloc(tmplist, ringlist)
+    end if
+
+END SUBROUTINE rm_not_pr
+
+! This subroutine adds the short ring list to the total ring list.
+subroutine add_ringlist(mainringlist, tmpringlist)
+    implicit none
+    ! IN:
+    type(ring), intent(in) :: tmpringlist(:)
+    ! INOUT:
+    type(ring), allocatable, intent(inout) :: mainringlist(:)
+    ! private:
+    type(ring), allocatable :: tmp(:)
+    integer :: l1, l2
+
+    l1 = size(mainringlist)
+    l2 = size(tmpringlist)
+
+    allocate(tmp(l1+l2))
+    tmp(:l1) = mainringlist
+    tmp(l1+1:l1+l2) = tmpringlist
+    deallocate(mainringlist)
+    call move_alloc(tmp, mainringlist)
+
+end subroutine add_ringlist
+
 END MODULE rings

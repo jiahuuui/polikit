@@ -299,8 +299,12 @@ subroutine print_cn()
       amount(i) = count(n_neighbor == i)
     end do
 
-    print *, "    CN = ", rank
-    print *, "Amount = ", amount
+    print *, ' ### Coordination Distribution'
+    print *, '***************************'
+    print 117, ' | CN    | ',rank
+    print 117, ' | Count | ',amount
+    print *, '***************************'
+    117 format (a11,*(i6, ' | '))
 
   end associate
 end subroutine print_cn

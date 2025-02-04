@@ -24,16 +24,26 @@
 
 4. set capacity of neigh/poly_neigh as a constant.
 
-### checklist:
+5. RSA path list build part optimization.
 
-poly
-./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c p
-bad
-./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c b
-rdf
-./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 10 -c g
-d_neigh_change
-./src/polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p
+6. RSA further analysis of the result.
+
+- set the branch length parameter from CLI.
+
+7. parallel analysis.
+
+8. cavity analysis
+
+### Test checklist:
+
+- Dynamic polyhedral neighbor change analysis
+
+`to be checked`
+
+- TCT analysis
+
+`to be checked`
+
 ## structure
 
 ```

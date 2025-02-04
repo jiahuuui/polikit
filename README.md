@@ -1,9 +1,14 @@
-# Polikit 0.2
+# Polikit 0.3
+[![GitHub](https://img.shields.io/badge/GitHub-V0.2-C71D23?logo=github&logoColor=white&labelColor=000)](https://github.com/jiahuuui/polikit/)
+[![Bitbucket](https://img.shields.io/badge/Bitbucket-V0.3-0052CC?logo=bitbucket&logoColor=white&labelColor=000)](https://bitbucket.org/jiahuijiahui/polikit/src/master/)
+<!-- [![GitLab](https://img.shields.io/badge/GitLab-Repository-FFD700?logo=gitlab&logoColor=white&labelColor=DC143C)](https://gitlab.com/jhcheung/polikit) [![Gitee](https://img.shields.io/badge/Gitee-Repository-FFD700?logo=gitee&logoColor=white&labelColor=DC143C)](https://gitlab.com/jiahuiiii)-->
+
 ## A polyhedral analysis toolkit
 
 This package is originally developed for polyhedral analysis of amorphous structures. Now it has a module for analysis related to topological constraint theory also. It takes the dumped atomic configurations as input, and is able to perform static or dynamic analysis on the configurations.
 
-#### 0.3 (working on ...)
+#### 0.3
+  *(Released on 22 Jan. 2025)*
  - Ring statistics analysis.
 
 #### 0.2
@@ -36,7 +41,6 @@ At the root directory of the code:
 
 5. RDF
 
-6. (Cavity analysis)
 
 ### Analysis of a series of configurations:
 
@@ -49,13 +53,13 @@ At the root directory of the code:
 ## Usage
 For static analysis(`-f`):
 
-**`./polikit -f abc.xyz -p 1 -r 2.35 -c p`**
+**`./polikit -f abc.xyz -p 1 -r 2.35 -c pbgr`**
 
 `-p [int]` can be 1 or 0, decides whether periodic boundary condition will be applied.
 
 `-r [float]` indicates the cutoff distance.
 
-`-c [string]` gives computing options, now the availables are: `p` - polyhedral analysis, `b` - bond angle analysis, `g` - radial distribution function.
+`-c [string]` gives computing options, now the availables are: `p` - polyhedral analysis, `b` - bond angle analysis, `g` - radial distribution function, `r` - ring statistics analysis.
 
 For dynamic analysis(`-d`):
 
@@ -65,14 +69,24 @@ For dynamic analysis(`-d`):
 
 `-c` available computing options in dynamic analysis are: `t` - tct analysis.
 
-## Test
-  `./polikit -f ../../test_exmp/0.xyz -p 1 -r 2.35 -c pb`
+## Examples
 
-  Perform polyhedral analysis on a single file.
-<!--   **`./polikit -f ../../test_exmp/0.xyz -p 1 -r 2.35 -c t`** -->
+- Polyhedral analysis
 
+`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c p`
 
-  `./polikit -d ../../test_exmp/ -1 -p 1 -r 2.35 -c b`
+- Bond angle analysis
 
-  Perform BAD analysis for each file in a directory.
+`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c b`
 
+- Radial distribution
+
+`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 10 -c g`
+
+- Ring statistics analysis
+
+`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c r`
+
+- Dynamic neighbor change analysis
+
+`./src/polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p`

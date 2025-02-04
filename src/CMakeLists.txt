@@ -7,18 +7,22 @@ project(polikit
 
 enable_language(Fortran)
 
-if(CMAKE_BUILD_TYPE STREQUAL "")
-    set(CMAKE_BUILD_TYPE "Debug")
+option(SET_DEBUG "Debug compile options" OFF)
+
+if(SET_DEBUG)
+    add_compile_options(-fbounds-check)
+    message(STATUS "Building in Debug mode")
+else()
+    add_compile_options(-O3)
+    message(STATUS "Building in Release mode")
 endif()
 
 find_package(OpenMP)
 
 if(OpenMP_Fortran_FOUND)
-    message("Find OpenMP_Fortran: ${OpenMP_Fortran_INCLUDE_DIR}; ${OpenMP_Fortran_LIBRARY};")
     add_compile_options(-fopenmp)
+    message(STATUS "Building with OMP")
 endif()
-
-add_compile_options(-fbounds-check)
 
 set(SRC
     stdlib_array.f90
