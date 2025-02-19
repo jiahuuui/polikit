@@ -7,9 +7,9 @@ project(polikit
 
 enable_language(Fortran)
 
-option(SET_DEBUG "Debug compile options" OFF)
+option(DEBUG "Debug compile options" OFF)
 
-if(SET_DEBUG)
+if(DEBUG)
     add_compile_options(-fbounds-check)
     message(STATUS "Building in Debug mode")
 else()
@@ -19,8 +19,21 @@ endif()
 
 find_package(OpenMP)
 
+# Get the number of CPU cores
+if(NOT DEFINED OMP_THREAD_COUNT)
+    cmake_host_system_information(RESULT CORE_COUNT QUERY NUMBER_OF_LOGICAL_CORES)
+    set(OMP_THREAD_COUNT ${CORE_COUNT})
+    message(STATUS "Detected CPU cores: ${CORE_COUNT}")
+endif()
+
 if(OpenMP_Fortran_FOUND)
+    message(STATUS "Building with OpenMP on ${OMP_THREAD_COUNT} threads")
+
+    # Set the number of threads as a compile definition
+    add_compile_definitions(OMP_THREAD_COUNT=${OMP_THREAD_COUNT})
+
     add_compile_options(-fopenmp)
+    add_link_options(-fopenmp)
     message(STATUS "Building with OMP")
 endif()
 
@@ -38,7 +51,7 @@ set(SRC
     rdf.f90
     bad.f90
     dynamic_data.f90
+    ha.f90
     )
-
 
 add_executable(polikit ${COMPILE_OPTIONS} ${SRC})

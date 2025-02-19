@@ -7,8 +7,4 @@ project(polikit
 
 enable_language(Fortran)
 
-# if(NOT CMAKE_BUILD_TYPE)
-#     set(CMAKE_BUILD_TYPE Release)
-# endif()
-
 add_subdirectory(src)

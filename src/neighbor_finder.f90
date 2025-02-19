@@ -28,21 +28,21 @@ module neighbor_finder
   contains
 
 ! Divide the simulation box into bins, and put atoms into their corresponding bins.
-SUBROUTINE create_bins(rCut, cellbins, xbin_max, ybin_max, zbin_max)
+SUBROUTINE create_bins(rCut, cells, xbin_max, ybin_max, zbin_max)
   IMPLICIT NONE
   ! in:
   real(dp), intent(in) :: rCut
   ! inOUT:
-  type(bins(capacity = :)), intent(inout), allocatable, dimension(:,:,:) :: cellbins
+  type(bins(capacity = :)), intent(inout), allocatable, dimension(:,:,:) :: cells
   integer, intent(inout) :: xbin_max, ybin_max, zbin_max
   ! PRIVATE:
   real(dp), allocatable, dimension(:,:) :: realxyz
   REAL(dp) :: x_min, y_min, z_min
   INTEGER :: xbin, ybin, zbin, atom, bincap
-
+199 format (a, i0)
   bincap = rCut**3 * 2
-  print *, 'Deviding simulation box into bins ...'
-  print *, "Capacity of bins is set to: ", bincap
+
+  print 199, " Capacity of bins is set to: ", bincap
 
   associate(xyz0 => coord_data%coord, lx => coord_data%lx, ly => coord_data%ly, lz => coord_data%lz)
 
@@ -59,17 +59,18 @@ SUBROUTINE create_bins(rCut, cellbins, xbin_max, ybin_max, zbin_max)
     ybin_max = CEILING(ly/rCut) - 1
     zbin_max = CEILING(lz/rCut) - 1
 
-    print *, "Number of bins on dimension X: ", xbin_max
-    print *, "Number of bins on dimension Y: ", ybin_max
-    print *, "Number of bins on dimension Z: ", zbin_max
+    print 199, " Number of bins on dimension X: ", xbin_max
+    print 199, " Number of bins on dimension Y: ", ybin_max
+    print 199, " Number of bins on dimension Z: ", zbin_max
 
   end associate
 
-  allocate(bins(bincap) :: cellbins(0:xbin_max+1,0:ybin_max+1,0:zbin_max+1))
-  cellbins%n = 0
-  cellbins%x_pbc = 0
-  cellbins%y_pbc = 0
-  cellbins%z_pbc = 0
+  allocate(bins(bincap) :: cells(0:xbin_max+1,0:ybin_max+1,0:zbin_max+1))
+  print *, 'Deviding box into bins, memory cost of bins: ', sizeof(cells)
+  cells%n = 0
+  cells%x_pbc = 0
+  cells%y_pbc = 0
+  cells%z_pbc = 0
 
   do atom = 1, natom
 
@@ -84,8 +85,12 @@ SUBROUTINE create_bins(rCut, cellbins, xbin_max, ybin_max, zbin_max)
     if (ybin == 0) ybin = 1
     if (zbin == 0) zbin = 1
 
-    cellbins(xbin,ybin,zbin)%n = cellbins(xbin,ybin,zbin)%n + 1
-    cellbins(xbin,ybin,zbin)%ids(cellbins(xbin,ybin,zbin)%n) = atom
+    cells(xbin,ybin,zbin)%n = cells(xbin,ybin,zbin)%n + 1
+    if (cells(xbin,ybin,zbin)%n > bincap) then
+        print *, " ! Bin capacity fulfilled due to unknown reason, stopping."
+        stop
+    end if
+    cells(xbin,ybin,zbin)%ids(cells(xbin,ybin,zbin)%n) = atom
 
   end do
 
@@ -94,9 +99,9 @@ SUBROUTINE create_bins(rCut, cellbins, xbin_max, ybin_max, zbin_max)
     do ybin = 0, ybin_max + 1
     do zbin = 0, zbin_max + 1
 
-      associate(x_pbc => cellbins(xbin, ybin, zbin)%x_pbc, &
-                y_pbc => cellbins(xbin, ybin, zbin)%y_pbc, &
-                z_pbc => cellbins(xbin, ybin, zbin)%z_pbc)
+      associate(x_pbc => cells(xbin, ybin, zbin)%x_pbc, &
+                y_pbc => cells(xbin, ybin, zbin)%y_pbc, &
+                z_pbc => cells(xbin, ybin, zbin)%z_pbc)
 
         if (xbin == 0) x_pbc = 1
         if (xbin == xbin_max + 1) x_pbc = -1
@@ -104,10 +109,10 @@ SUBROUTINE create_bins(rCut, cellbins, xbin_max, ybin_max, zbin_max)
         if (ybin == ybin_max + 1) y_pbc = -1
         if (zbin == 0) z_pbc = 1
         if (zbin == zbin_max + 1) z_pbc = -1
-        cellbins(xbin, ybin, zbin)%n = &
-        cellbins(xbin + x_pbc*xbin_max, ybin + y_pbc*ybin_max, zbin + z_pbc*zbin_max)%n
-        cellbins(xbin, ybin, zbin)%ids = &
-        cellbins(xbin + x_pbc*xbin_max, ybin + y_pbc*ybin_max, zbin + z_pbc*zbin_max)%ids
+        cells(xbin, ybin, zbin)%n = &
+        cells(xbin + x_pbc*xbin_max, ybin + y_pbc*ybin_max, zbin + z_pbc*zbin_max)%n
+        cells(xbin, ybin, zbin)%ids = &
+        cells(xbin + x_pbc*xbin_max, ybin + y_pbc*ybin_max, zbin + z_pbc*zbin_max)%ids
       end associate
     end do
     end do
@@ -130,9 +135,9 @@ SUBROUTINE find_neighbors()
   r = cutoff**2
 
   call create_bins(cutoff, cellbins, xbin_max, ybin_max, zbin_max)
-  print *, 'Constructing neighbor list from bins data ...'
 
-  allocate(neighbor_list(atom_number = natom, capacity = 10) :: neigh_list)
+  if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = 10) :: neigh_list)
+  print *, 'Constructing neighbor list, memory cost of neighbor list: ', sizeof(neigh_list%neighbors)
   neigh_list%n_neighbor = 0
   neigh_list%neighbors = 0
 
@@ -208,8 +213,8 @@ SUBROUTINE find_neighbors_d()
   call create_bins(cutoff, cellbins, xbin_max, ybin_max, zbin_max)
   print *, 'Constructing neighbor list from bins data ...'
 
-  allocate(neighbor_list(atom_number = natom, capacity = 10) :: neigh_list)
-  allocate(delta(natom, 10, 3), STAT=ierr, ERRMSG=emsg)
+  if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = 10) :: neigh_list)
+  if (.not. allocated(delta)) allocate(delta(natom, 10, 3), STAT=ierr, ERRMSG=emsg)
 
   neigh_list%n_neighbor = 0
   neigh_list%neighbors = 0
@@ -312,8 +317,12 @@ end subroutine print_cn
 subroutine clean_neighbor
   implicit none
 
-  if (allocated(neigh_list)) deallocate(neigh_list)
-  if (allocated(delta)) deallocate(delta)
+  if (allocated(neigh_list)) then
+    neigh_list%n_neighbor = 0
+    neigh_list%neighbors = 0
+  end if
+
+  if (allocated(delta)) delta = 0.
 
 end subroutine clean_neighbor
 

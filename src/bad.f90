@@ -94,7 +94,7 @@ subroutine hist_of_bad(array)
   end do
 
   do i = 1,180
-    print *, bin_center, bin(i)
+    print "(f8.2, '    ', i0)", bin_center, bin(i)
     bin_center = bin_center + 1.0
   end do
 

@@ -10,7 +10,7 @@ MODULE rings_simple
         integer :: sorted(20) = 0
     END TYPE
 
-    integer :: ring_cap, ring_size  ! Main ring list capacity and current size.
+    integer :: ringlist_cap, ringlist_size  ! Main ring list capacity and current size.
     real(dp) :: tstart, tcheck, tneilist, tfindring, tcheckrepi, tcheckpr, taddring
     integer :: crude_ring_num
     integer :: maxlvl   ! Max length, decided by ring size limit
@@ -31,8 +31,8 @@ SUBROUTINE rsa_simple()     ! Ring statistics analysis simple
     emptyring%element = 0
     emptyring%sorted = 0
 
-    ring_cap = 1000
-    ring_size = 0
+    ringlist_cap = 1000
+    ringlist_size = 0
 
     crude_ring_num = 0
 
@@ -44,7 +44,7 @@ SUBROUTINE rsa_simple()     ! Ring statistics analysis simple
 
     maxlvl = 8
     print *, 'Max branch length:', maxlvl
-    allocate(ringList(ring_cap))
+    allocate(ringList(ringlist_cap))
     ringList%l = 0
 
     DO atom = 1, natom
@@ -53,7 +53,7 @@ SUBROUTINE rsa_simple()     ! Ring statistics analysis simple
         CALL find_rings(pathArray, ringList)
     END DO
 
-    call print_ringno(ringList(:ring_size)%l)
+    call print_ringno(ringList(:ringlist_size)%l)
 
     print *, 'Crude ring number found:', crude_ring_num
 
@@ -464,19 +464,19 @@ SUBROUTINE add_ring(branch1, branch2, mainringlist)
         if (ispr) then
             call cpu_time(tstart)
 
-            if (ring_size == 0) then
+            if (ringlist_size == 0) then
                 mainringlist(1) = ar
-                ring_size = 1
-            else if (ring_size < ring_cap) then
-                mainringlist(rpos:ring_size+1) = eoshift(mainringlist(rpos:ring_size+1), shift=-1, boundary=emptyring)
+                ringlist_size = 1
+            else if (ringlist_size < ringlist_cap) then
+                mainringlist(rpos:ringlist_size+1) = eoshift(mainringlist(rpos:ringlist_size+1), shift=-1, boundary=emptyring)
                 mainringlist(rpos) = ar
-                ring_size = ring_size + 1
+                ringlist_size = ringlist_size + 1
 
-            else if (ring_size == ring_cap) then
+            else if (ringlist_size == ringlist_cap) then
                 ! Expand the ring list if full.
-                ring_cap = ring_cap*2
-                allocate(tmp(ring_cap))
-                tmp(:ring_size) = mainringlist(:ring_size)
+                ringlist_cap = ringlist_cap*2
+                allocate(tmp(ringlist_cap))
+                tmp(:ringlist_size) = mainringlist(:ringlist_size)
                 deallocate(mainringlist)
                 call move_alloc(tmp, mainringlist)
             end if
@@ -501,7 +501,7 @@ subroutine new_check_rp(ar, mainringlist, pos, goal_found)
 
     n_elem = ar%l
     low = 1
-    high = ring_size
+    high = ringlist_size
 
     level = 1
     pos = 1
@@ -556,7 +556,7 @@ subroutine new_check_rp(ar, mainringlist, pos, goal_found)
         level = level+1
     end do
 
-    if (ring_size == 0) then
+    if (ringlist_size == 0) then
         goal_found = .false.
         pos = 1
         return

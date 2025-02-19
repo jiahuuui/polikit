@@ -105,10 +105,19 @@ SUBROUTINE poly_neighbor()
     endif
   enddo
 
-    print *, "      CS       ES       FS"
-    print *, count(ln==1), "   ",count(ln==2),"    ",count(ln==3)
-    print *, 'Polyhedral analysis ... Done'
+  print *, ' ### Polyhedra Topological Analysis'
+  print *, '***************************'
+  print *, "|   CS   |   ES   |   FS   |"
+  print 138, ' | ', count(ln==1), count(ln==2), count(ln==3)
+  print *, '***************************'
+  print *, 'Polyhedral analysis ... Done'
+
   end associate
+
+
+
+138 format (a3,*(i6, ' | '))
+
 END SUBROUTINE poly_neighbor
 
 

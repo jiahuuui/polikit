@@ -28,15 +28,22 @@ SUBROUTINE get_data_from_file(file_name, path)
     character(len=*), intent(in)::path
     !
     integer :: slength
-    print *, 'Reading xyz from file named ', file_name ! trim(dpath)//fname
+
+!     print *, 'Reading xyz from file named ', file_name ! trim(dpath)//fname
 !     slength = len(trim(fname))
     ! check the format
     if (verify('xyz', file_name) == 0) then
+        print *, 'File name: ', trim(file_name), '; XYZ format detected.'
         call read_xyz_file(file_name, path)
     else if (verify('dump', file_name) == 0) then
+        print *, 'File name: ', trim(file_name), '; LAMMPS dump format detected.'
         call read_dump_file(file_name, path)
     else if (verify('data', file_name) == 0) then
+        print *, 'File name: ', trim(file_name), '; LAMMPS data format detected.'
         call read_data_file(file_name, path)
+    else
+        print *, 'ERROR: Unknown format!'
+        stop
     end if
 
     print *, 'Leaving get xyz subroutine ...'
@@ -54,10 +61,10 @@ SUBROUTINE read_xyz_file(file_name, path)
     open (unit=20, file=trim(path)//file_name, status='old', iostat=ierr, iomsg=emsg)
     if (ierr /=0) print *, emsg
     read (20,*, iostat=ierr) natom
-    print *, natom," atoms read from ",file_name
+    print *, natom," atoms read from ", trim(file_name)
     read (20,*, iostat=ierr)
 
-    allocate(coordinates(natom) :: coord_data)
+    if (.not. allocated(coord_data)) allocate(coordinates(natom) :: coord_data)
     allocate(typechar(natom), STAT=ierr, ERRMSG=emsg)
 
     associate(xyz => coord_data%coord, lx => coord_data%lx, ly => coord_data%ly, lz => coord_data%lz)
@@ -94,7 +101,8 @@ SUBROUTINE read_dump_file(file_name, path)
     integer :: i, id
     real(dp) :: xlo, xhi, ylo, yhi, zlo, zhi
     real(dp) :: tmp_x, tmp_y, tmp_z
-    character(len=10), allocatable :: typechar(:), tmptype
+    character(len=10), allocatable :: typechar(:)
+    character(len=10) :: tmptype
 
     open(unit=20, file=trim(path)//file_name, status='old', iostat=ierr, iomsg=emsg)
 
@@ -102,15 +110,16 @@ SUBROUTINE read_dump_file(file_name, path)
     read (20,*, iostat=ierr)
     read (20,*, iostat=ierr) ! ITEM: NUMBER OF ATOMS
     read (20,*, iostat=ierr) natom
-    print *, natom," atoms read from ",file_name
+    print '(" There are ", i0, " atoms in ", a)', natom, trim(file_name)
 
+    if (.not. allocated(coord_data)) allocate(coordinates(natom) :: coord_data)
     allocate(typechar(natom))
 
     read (20,*, iostat=ierr) ! ITEM: BOX BOUNDS pp pp pp
     read (20,*, iostat=ierr) xlo, xhi
     read (20,*, iostat=ierr) ylo, yhi
     read (20,*, iostat=ierr) zlo, zhi
-    read (20,*, iostat=ierr) ! ITEM: ATOMS id type x y z c_ep c_ek
+    read (20,*, iostat=ierr) ! ITEM: ATOMS
 
     coord_data%xmin = xlo
     coord_data%ymin = ylo
@@ -120,21 +129,24 @@ SUBROUTINE read_dump_file(file_name, path)
     coord_data%ly = yhi - ylo
     coord_data%lz = zhi - zlo
 
-    PRINT *, "Box size on dimension X: ", coord_data%xmin, ", ", coord_data%xmin + coord_data%lx
-    PRINT *, "Box size on dimension Y: ", coord_data%ymin, ", ", coord_data%ymin + coord_data%ly
-    PRINT *, "Box size on dimension Z: ", coord_data%zmin, ", ", coord_data%zmin + coord_data%lz
+    PRINT '(" Box size on dimension X: ", f10.4, ", ", f10.4, ";")', coord_data%xmin, coord_data%xmin + coord_data%lx
+    PRINT '(" Box size on dimension Y: ", f10.4, ", ", f10.4, ";")', coord_data%ymin, coord_data%ymin + coord_data%ly
+    PRINT '(" Box size on dimension Z: ", f10.4, ", ", f10.4, ";")', coord_data%zmin, coord_data%zmin + coord_data%lz
 
     associate(xyz => coord_data%coord)
+
         do i = 1, natom
-            read (20,*, iostat=ierr) id, tmptype, tmp_x, tmp_y, tmp_z
-            typechar(id) = tmptype
-            xyz(id,1) = tmp_x
-            xyz(id,2) = tmp_y
-            xyz(id,3) = tmp_z
+!             read (20,*, iostat=ierr) xyz(i,1), xyz(i,2), xyz(i,3), typechar(i), id
+            read (20,*, iostat=ierr) id, typechar(i), xyz(i,1), xyz(i,2), xyz(i,3)
+!             typechar(id) = tmptype
+!             xyz(id,1) = tmp_x
+!             xyz(id,2) = tmp_y
+!             xyz(id,3) = tmp_z
         end do
     end associate
 
     close(20)
+    call type_convert(typechar)
     deallocate(typechar)
 END SUBROUTINE
 
@@ -148,14 +160,19 @@ SUBROUTINE read_data_file(file_name, path)
     integer :: i, id, ntype
     real(dp) :: xlo, xhi, ylo, yhi, zlo, zhi
     real(dp) :: tmp_x, tmp_y, tmp_z
-    character(len=10), allocatable :: typechar(:), tmptype
+    character(len=10), allocatable :: typechar(:)
+    character(len=10) :: tmptype
 
     open(unit=20, file=trim(path)//file_name, status='old', iostat=ierr, iomsg=emsg)
 
     read (20,*, iostat=ierr) ! Comments
     read (20,*, iostat=ierr)
     read (20,*, iostat=ierr) natom  ! atoms
-    print *, natom," atoms read from ",file_name
+
+    print '(" There are ", i0, " atoms in ", a)', natom, trim(file_name)
+    if (.not. allocated(coord_data)) allocate(coordinates(natom) :: coord_data)
+    allocate(typechar(natom))
+
     read (20,*, iostat=ierr) ntype  ! atom types
     read (20,*, iostat=ierr)
 
@@ -163,12 +180,10 @@ SUBROUTINE read_data_file(file_name, path)
     read (20,*, iostat=ierr) ylo, yhi   ! ylo yhi
     read (20,*, iostat=ierr) zlo, zhi   ! zlo zhi
 
-    do i = 1, 8
-        read (20,*, iostat=ierr)
-        ! skip the masses.
-    end do
-
-    allocate(typechar(natom))
+!     do i = 1, 8
+!         read (20,*, iostat=ierr)
+!         ! skip the masses.
+!     end do
 
     coord_data%xmin = xlo
     coord_data%ymin = ylo
@@ -178,19 +193,27 @@ SUBROUTINE read_data_file(file_name, path)
     coord_data%ly = yhi - ylo
     coord_data%lz = zhi - zlo
 
-    PRINT *, "Box size on dimension X: ", coord_data%xmin, ", ", coord_data%xmin + coord_data%lx
-    PRINT *, "Box size on dimension Y: ", coord_data%ymin, ", ", coord_data%ymin + coord_data%ly
-    PRINT *, "Box size on dimension Z: ", coord_data%zmin, ", ", coord_data%zmin + coord_data%lz
+    PRINT '(" Box size on dimension X: ", f10.4, ", ", f10.4, ";")', coord_data%xmin, coord_data%xmin + coord_data%lx
+    PRINT '(" Box size on dimension Y: ", f10.4, ", ", f10.4, ";")', coord_data%ymin, coord_data%ymin + coord_data%ly
+    PRINT '(" Box size on dimension Z: ", f10.4, ", ", f10.4, ";")', coord_data%zmin, coord_data%zmin + coord_data%lz
+
+    read (20,*, iostat=ierr)
+    read (20,*, iostat=ierr)    ! Atoms  # atomic
+    read (20,*, iostat=ierr)
 
     associate(xyz => coord_data%coord)
         do i = 1, natom
-            read (20,*, iostat=ierr) id, tmptype, tmp_x, tmp_y, tmp_z
-            typechar(id) = tmptype
-            xyz(id,1) = tmp_x
-            xyz(id,2) = tmp_y
-            xyz(id,3) = tmp_z
+            read (20,*, iostat=ierr) id, typechar(i), xyz(i,1), xyz(i,2), xyz(i,3)
+!             typechar(id) = tmptype
+!             xyz(id,1) = tmp_x
+!             xyz(id,2) = tmp_y
+!             xyz(id,3) = tmp_z
         end do
     end associate
+
+    close(20)
+    call type_convert(typechar)
+    deallocate(typechar)
 END SUBROUTINE
 
 ! if type names are string in data file, we need to convert it to integer. Oxygen atom is
@@ -222,15 +245,18 @@ SUBROUTINE type_convert(charin)
             end do
 
         end do
-        print *, "typename    typeid    number"
+        print *, " ### Atom Type Number"
+        print *, "****************************"
+        print *, "Typename    Typeid    Number"
 
         o_type = 1
         do i = 1, ntype
-            print *, typename(i), i, count(ptype == i)  !atomintype(i)
+            print "('   ', a, i0, '         ', i0)", typename(i), i, count(ptype == i)  !atomintype(i)
             if (count(ptype==i) > count(ptype==o_type)) then
                 o_type = i
             end if
         end do
+        print *, "****************************"
     end associate
 
 END SUBROUTINE
@@ -238,7 +264,18 @@ END SUBROUTINE
 subroutine clean_xyz_data
     implicit none
 
-    if (allocated(coord_data)) deallocate(coord_data)
+    if (allocated(coord_data)) then
+        coord_data%lx = 0.0
+        coord_data%ly = 0.0
+        coord_data%lz = 0.0
+
+        coord_data%xmin = 0.0
+        coord_data%ymin = 0.0
+        coord_data%zmin = 0.0
+
+        coord_data%ptype = 0
+        coord_data%coord = 0.0
+    end if
 
 end subroutine
 

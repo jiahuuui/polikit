@@ -80,9 +80,43 @@ subroutine get_rdf()
         rdf_data%rdf(p) = rdf_data%n(p)/ideal_count
     end do
 
+end subroutine get_rdf
+
+subroutine calculate_rdf()
+    implicit none
+
+    call get_rdf()
     call print_rdf()
 
-end subroutine get_rdf
+end subroutine calculate_rdf
+
+! Calculate the Wendt-Abraham parameter from RDF data.
+subroutine wa_parameter()
+    implicit none
+    integer, dimension(1) :: p
+    integer :: minp, maxp
+    real(dp) :: gmin, gmax
+    real(dp) :: r_wa    ! Wendt-Abraham parameter
+    real(dp) :: r_mwa   ! Modified Wendt-Abraham parameter
+
+    call get_rdf()
+    p = maxloc(rdf_data%rdf)
+    maxp = p(1)
+    gmax = rdf_data%rdf(maxp)
+
+    p = minloc(rdf_data%rdf(maxp:))
+    minp = p(1)+maxp
+    gmin = rdf_data%rdf(minp)
+
+    r_wa = gmin/gmax
+    r_mwa = r_wa**2
+
+    print *, 'Minloc and Maxloc:', minp, maxp
+    print *, 'Min and Max value:', gmin, gmax
+    print *, 'R_wa (Wendt-Abraham parameter) is: ', r_wa
+    print *, 'R_mwa (Modified WA parameter) is: ', r_mwa
+
+end subroutine wa_parameter
 
 subroutine get_bin_pos(cutoff, bin_count, hist)
     implicit none
@@ -95,9 +129,9 @@ subroutine get_bin_pos(cutoff, bin_count, hist)
     real(dp) :: bin_size, half_bin
     integer :: i
 
-    print *, 'Calculating bin positions in RDF histogram ...'
+    if (.not. allocated(hist)) allocate(histogram(bin_count = bin_count) :: hist)
+    print *, 'Calculating bin positions, memory cost of RDF: ', sizeof(hist)
 
-    allocate(histogram(bin_count = bin_count) :: hist)
     hist%n = 0
     hist%rdf = 0.
 
@@ -150,7 +184,12 @@ end subroutine print_rdf
 subroutine clean_rdf()
     implicit none
 
-    if (allocated(rdf_data)) deallocate(rdf_data)
+    if (allocated(rdf_data)) then
+        rdf_data%bound = 0.
+        rdf_data%pos = 0.
+        rdf_data%n = 0
+        rdf_data%rdf = 0.
+    end if
 end subroutine clean_rdf
 
 end module rdf

@@ -11,6 +11,8 @@ program main
     use dynamic_data
     use rings_simple
     use data_input
+    use ha
+    use omp_lib
     implicit none
 ! computing options
     LOGICAL :: flag_nf = .false.    ! neighbor finder flag.
@@ -22,6 +24,8 @@ program main
     logical :: flag_bad = .false.   ! if bond angle distribution is analyzed.
     logical :: flag_rstat = .false. ! ring statistics analysis.
     logical :: flag_rdf = .false.   ! radial distribution function.
+    logical :: flag_wa = .false.    ! Wendt-Abraham parameter from RDF.
+    logical :: flag_ha = .false.    ! Honeycutt-Anderson parameters.
 
 ! dump options
     logical :: dflag_cn = .false.
@@ -37,13 +41,16 @@ program main
 ! momentary d2min analysis when analysis results in a certain range need to be stored
 ! and the head and tail elements are the ones compared.
 
+!     !$OMP PARALLEL
+!         PRINT*, "Hello from thread", OMP_GET_THREAD_NUM()
+!     !$OMP END PARALLEL
 
     call cpu_time(start)
         ! put code to test here
 
     call get_input_options() ! get the command line input strings
-!     get flags
 
+!     get computing flags
     IF (verify('p',coption) == 0) THEN
         print *, "Perform polyhedral analysis ... True"
         flag_poly = .true.
@@ -53,8 +60,6 @@ program main
         print *, "Perform topological contraint analysis ... True"
         flag_nfd = .true.
         flag_tct = .true.
-!     ELSE IF (verify(coption,'d') == 0) THEN
-!         flag_dump = .true.
     END IF
     IF (verify('n',coption) == 0) THEN
         flag_nf = .true.
@@ -74,6 +79,15 @@ program main
         print *, "Calculate radial distribution function ... True"
         flag_rdf = .true.
     ENDIF
+    IF (verify('w', coption) == 0) THEN
+        print *, "Calculate Wendt-Abraham parameter from RDF ... True"
+        flag_wa = .true.
+    ENDIF
+    if (verify('h', coption) == 0) THEN
+        print *, "Calculate Honeycutt-Anderson parameters ... True"
+        flag_nf = .true.
+        flag_ha = .true.
+    end if
 
     olength = len(trim(doption))
     if(olength /= 0) then
@@ -115,13 +129,17 @@ subroutine static_analysis()
 
     if (flag_nfd) call find_neighbors_d()
 
-    if (flag_rdf) call get_rdf()
+    if (flag_rdf) call calculate_rdf()
+
+    if (flag_wa) call wa_parameter()
 
     if (flag_poly) call poly_neighbor()
 
     if (flag_bad) call bond_angle_distribution()
 
     if (flag_rstat) call rsa_simple()
+
+    if (flag_ha) call calculate_ha()
 !         call poly_neighbor      !how does it know if we need static or dynamic results?
 !     end if
     if (flag_tct) then
@@ -147,19 +165,23 @@ SUBROUTINE dynamic()
     IMPLICIT NONE
     integer :: fcounter
 
-    print *, fnumber
+!     print *, fnumber
     do fcounter = 1, fnumber
 
         file_name = trim(fnames(fcounter))
-        print *, 'Performing dynamic analysis on ',file_name
+        print *, 'Performing dynamic analysis on ', trim(file_name)
 
         call static_analysis()
 
-        call collect_data()
+        if (frame_interval /= 0) then
+            call collect_data()
 
-        call compare_data()
+            call compare_data()
+        end if
 
         call mem_clean()
+
+        print *, '---------------------------End of Frame-----------------------------'
     end do
 
 END SUBROUTINE dynamic
@@ -180,6 +202,9 @@ end subroutine collect_data
 
 subroutine collect_neighbor()
     implicit none
+    integer :: n
+
+    n = frame_interval
 
     if (.not. allocated(neigh_list_bf)) then
         allocate(neigh_list_bf(frame_interval,natom,11))
@@ -187,12 +212,12 @@ subroutine collect_neighbor()
         print *, 'Initializaing neighbor list data container ...'
     end if
 
-    neigh_list_bf(:-2,:,:) = neigh_list_bf(2:,:,:)
-    neigh_list_bf(-1,:,1) = neigh_list%n_neighbor
-    neigh_list_bf(-1,:,2:) = neigh_list%neighbors
+    neigh_list_bf(:n-1,:,:) = neigh_list_bf(2:,:,:)
+    neigh_list_bf(n-1,:,1) = neigh_list%n_neighbor   ! First column for the number of neighbors
+    neigh_list_bf(n-1,:,2:) = neigh_list%neighbors   ! Then the atom ids.
 
 !     d_neighbors(:-2) = d_neighbors(2:)
-
+!
 !     if (.not. allocated(d_neighbors)) then
 !         allocate(neighbor_list(atom_number = natom, capacity = 10) :: d_neighbors(frame_interval))
 !         print *, 'Initializaing neighbor list data container ...'
@@ -264,7 +289,7 @@ subroutine mem_clean
 !     if (allocated(constrain))   deallocate(constrain)
 
     if (flag_nf .or. flag_nfd)    call clean_neighbor
-    if (flag_rdf)   call clean_rdf
+    if (flag_rdf .or. flag_wa)   call clean_rdf
 
     call clean_xyz_data
 
