@@ -1,8 +1,8 @@
 module rdf
     use precision
     use data_types
-    use parser, only: cutoff, pbc
-    use data_input, only: coord_data, natom
+    use parser, only: cutoffs, pbc
+    use data_input, only: coord_data, natom, ntype, atom_frac
     use neighbor_finder
 
     type histogram(bin_count)
@@ -13,7 +13,11 @@ module rdf
         real(dp), dimension(bin_count) :: rdf = 0.
     end type
 
-    type(histogram(bin_count = :)), allocatable :: rdf_data
+    real(dp), dimension(:,:), allocatable :: bin_info
+    ! [lower, center, upper][bin_count]
+    integer, dimension(:,:,:), allocatable :: rdf_raw
+    ! [type1][type2][bin_count]
+    real(dp), dimension(:,:), allocatable :: rdf_data
 
     contains
 
@@ -21,46 +25,53 @@ subroutine get_rdf()
     implicit none
     ! in:
     ! cutoff, xyz
-    real(dp) :: bin_size, atom_density, r, d, ideal_count
+    real(dp) :: bin_size, atom_density, r, d, cutoff
     integer :: bin_count = 400
 
     integer :: xbin_max, ybin_max, zbin_max, atom, atom2
-    integer :: xbin, ybin, zbin, id, checkid, p, q, o
-    type(bins(capacity=:)), allocatable, dimension(:,:,:) :: mesh
+    integer :: xbin, ybin, zbin, p, q, o, k
+    integer :: id, checkid, type1, type2
+
+    real(dp), allocatable :: ideal_count(:)
+    integer, allocatable :: sum_rdf(:)
 
     print *, "Radial distribution function calculation ... Start'"
 
+    cutoff = cutoffs(1)
     r = cutoff**2
     bin_size = cutoff/bin_count
-    call get_bin_pos(cutoff, bin_count, rdf_data)
+    call get_bin_pos(cutoff, bin_count) ! initialize bin_info, rdf_raw, rdf_data
 
     atom_density = natom / (coord_data%lx * coord_data%ly * coord_data%lz)
 
-    call create_bins(cutoff, mesh, xbin_max, ybin_max, zbin_max)
+    call create_bins(cutoff, xbin_max, ybin_max, zbin_max)
 
     do xbin = 1, xbin_max
     do ybin = 1, ybin_max
     do zbin = 1, zbin_max
-        do atom = 1, mesh(xbin, ybin, zbin)%n
-            id = mesh(xbin, ybin, zbin)%ids(atom)
+        do atom = 1, cells_n(xbin, ybin, zbin)
+            id = cells_ids(xbin, ybin, zbin, atom)
+            type1 = coord_data%ptype(id)
 
             do p = -1, 1
             do q = -1, 1
             do o = -1, 1
 
-            associate(checked_n => mesh(xbin+p, ybin+q, zbin+o)%n, checked_ids => mesh(xbin+p, ybin+q, zbin+o)%ids,&
-            x_pbc => mesh(xbin+p, ybin+q, zbin+o)%x_pbc, y_pbc => mesh(xbin+p, ybin+q, zbin+o)%y_pbc, &
-            z_pbc => mesh(xbin+p, ybin+q, zbin+o)%z_pbc, xyz => coord_data%coord)
+            associate(checked_n => cells_n(xbin+p, ybin+q, zbin+o), checked_ids => cells_ids(xbin+p, ybin+q, zbin+o, :),&
+            x_pbc => cells_xpbc(xbin+p, ybin+q, zbin+o), y_pbc => cells_ypbc(xbin+p, ybin+q, zbin+o), &
+            z_pbc => cells_zpbc(xbin+p, ybin+q, zbin+o), xyz => coord_data%coord)
 
                 do atom2 = 1, checked_n
                     checkid = checked_ids(atom2)
+                    type2 = coord_data%ptype(checkid)
+
                     if (checkid < id) then   !to avoid repeat calculation
                         d = (xyz(checkid,1) - x_pbc*coord_data%lx - xyz(id,1))**2& !x
                         + (xyz(checkid,2) - y_pbc*coord_data%ly - xyz(id,2))**2& !y
                         + (xyz(checkid,3) - z_pbc*coord_data%lz - xyz(id,3))**2  !z
 
                         if (d < r) then
-                            call push_to_histbin(rdf_data, sqrt(d))
+                            call push_to_histbin(type1, type2, sqrt(d))
                         endif
                     endif
                 end do
@@ -75,9 +86,25 @@ subroutine get_rdf()
     end do
     end do
     end do
-    do p = 1, bin_count
-        ideal_count = 2*pi*rdf_data%pos(p)**2*bin_size*atom_density*natom
-        rdf_data%rdf(p) = rdf_data%n(p)/ideal_count
+
+    k = 1+ntype*(ntype+1)/2
+
+    allocate(rdf_data(k, bin_count))
+    allocate(ideal_count(bin_count))
+    allocate(sum_rdf(bin_count))
+
+    ideal_count = 4*pi*bin_info(1,:)**2*bin_size*atom_density*natom
+    sum_rdf = [(sum(rdf_raw(:,:,o)), o=1, bin_count)]
+!     sum(rdf_raw, dim=3)
+    rdf_data(1,:) = sum_rdf/ideal_count
+
+    o = 2
+    do p = 1, ntype
+        do q = p, ntype
+            ideal_count = 4*pi*bin_info(1,:)**2*bin_size*atom_density*natom*atom_frac(p)*atom_frac(q)
+            rdf_data(o,:) = rdf_raw(p,q,:)/ideal_count
+            o = o+1
+        end do
     end do
 
 end subroutine get_rdf
@@ -100,13 +127,13 @@ subroutine wa_parameter()
     real(dp) :: r_mwa   ! Modified Wendt-Abraham parameter
 
     call get_rdf()
-    p = maxloc(rdf_data%rdf)
+    p = maxloc(rdf_data(1,:))
     maxp = p(1)
-    gmax = rdf_data%rdf(maxp)
+    gmax = rdf_data(1,maxp)
 
-    p = minloc(rdf_data%rdf(maxp:))
+    p = minloc(rdf_data(1,maxp:))
     minp = p(1)+maxp
-    gmin = rdf_data%rdf(minp)
+    gmin = rdf_data(1,minp)
 
     r_wa = gmin/gmax
     r_mwa = r_wa**2
@@ -118,48 +145,50 @@ subroutine wa_parameter()
 
 end subroutine wa_parameter
 
-subroutine get_bin_pos(cutoff, bin_count, hist)
+! initialize histogram, rdf_raw, rdf_data.
+subroutine get_bin_pos(cutoff, bin_count)
     implicit none
     ! Input:
     real(dp), intent(in) :: cutoff
     integer, intent(in) :: bin_count
-    ! InOutput:
-    type(histogram(bin_count = :)), allocatable, intent(inout) :: hist
-    !
+    ! Private:
     real(dp) :: bin_size, half_bin
     integer :: i
 
-    if (.not. allocated(hist)) allocate(histogram(bin_count = bin_count) :: hist)
-    print *, 'Calculating bin positions, memory cost of RDF: ', sizeof(hist)
+    if (.not. allocated(bin_info)) allocate(bin_info(3, bin_count))
+    if (.not. allocated(rdf_raw)) allocate(rdf_raw(ntype, ntype, bin_count))
+!     if (.not. allocated(rdf_data)) allocate(rdf_data(ntype, ntype, bin_count))
 
-    hist%n = 0
-    hist%rdf = 0.
+    bin_info = 0.
+    rdf_raw = 0
+!     rdf_data = 0.
 
     bin_size = cutoff/bin_count
     half_bin = bin_size/2.0
 
-    associate(bound => hist%bound, pos => hist%pos)
-        do i = 1, bin_count
-            pos(i) = bin_size * (i - 1) + half_bin  ! center
-            bound(i, 1) = bin_size * (i - 1)        ! lower bound
-            bound(i, 2) = bin_size * i              ! upper bound
-        end do
-    end associate
+    do i = 1, bin_count
+        bin_info(2,i) = bin_size*(i-1)+half_bin ! center
+        bin_info(1,i) = bin_size*(i-1)          ! lower bound
+        bin_info(3,i) = bin_size*i              ! upper bound
+    end do
 
 end subroutine get_bin_pos
 
-subroutine push_to_histbin(hist, a)
+! Push raw data to the histogram by pair types.
+subroutine push_to_histbin(type1, type2, a)
     implicit none
-    ! inout:
-    type(histogram(bin_count = :)), allocatable, intent(inout) :: hist
     ! in:
+    integer, intent(in) :: type1, type2
     real(dp), intent(in) :: a
-    !
-    integer :: i
+    ! private
+    integer :: i, bc
 
-    do i = 1, hist%bin_count
-        if (a < hist%bound(i,2)) then
-            hist%n(i) = hist%n(i) + 1
+    bc = size(bin_info(1,:))
+
+    do i = 1, bc
+        if (a < bin_info(3,i)) then
+            rdf_raw(type1, type2, i) = rdf_raw(type1, type2, i)+1
+            rdf_raw(type2, type1, i) = rdf_raw(type2, type1, i)+1
             exit
         else
             continue
@@ -170,12 +199,28 @@ end subroutine push_to_histbin
 
 subroutine print_rdf()
     implicit none
-    integer :: i
+    integer :: i, j, t
+    character(len=8) :: str
+    character(:), allocatable :: head
+    real(dp), allocatable :: row(:)
+
+    allocate(row(2+ntype*(ntype+1)/2))
+    head = 'r     g(r)'
 
     print *, '================================================'
-    print *, 'r     g(r)'
-    do i = 1, rdf_data%bin_count
-        print *, rdf_data%pos(i), '  ',rdf_data%rdf(i)
+    do i = 1, ntype
+        do j = i, ntype
+            t = i*10+j
+            write (str, '(I8)') t
+            head  = head//str
+        end do
+    end do
+
+    print *, head
+    do i = 1, size(bin_info(1,:))
+        row(1) = bin_info(1,i)
+        row(2:) = rdf_data(:,i)
+        print *, row
     end do
     print *, '================================================'
 
@@ -184,12 +229,9 @@ end subroutine print_rdf
 subroutine clean_rdf()
     implicit none
 
-    if (allocated(rdf_data)) then
-        rdf_data%bound = 0.
-        rdf_data%pos = 0.
-        rdf_data%n = 0
-        rdf_data%rdf = 0.
-    end if
+    if (allocated(bin_info)) deallocate(bin_info)
+    if (allocated(rdf_raw)) deallocate(rdf_raw)
+    if (allocated(rdf_data)) deallocate(rdf_data)
 end subroutine clean_rdf
 
 end module rdf

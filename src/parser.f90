@@ -9,8 +9,9 @@ MODULE parser
     character(len=20) :: coption, doption
     character(len=20), allocatable :: fnames(:)
     integer :: fnumber, pbc, frame_interval
-    real(dp) :: cutoff
+    character(len=30) :: cutoff_str
     logical :: static
+    real(dp), allocatable :: cutoffs(:)
 
 contains
 
@@ -34,8 +35,8 @@ SUBROUTINE get_input_options()
             read (args, *) pbc
             if (pbc == 1) print *, "Periodic boundary conditions ... True"
         case ("-r")         !read cutoff distance
-            call get_command_argument(i+1, args)
-            read (args, *) cutoff
+            call get_command_argument(i+1, cutoff_str)
+!             read (args, *) cutoff_str
         case ("-f")         !data is a single file
             static = .true.
             print *, "Performing static analysis ... True"
@@ -60,13 +61,9 @@ SUBROUTINE get_input_options()
             if(len_trim(doption)==0) then
                 print *, 'Error: no argument specified for output!'
             end if
-        case ("--help")     !help document
+        case ("--help", "-h")     !help document
             call help_msg()
-        CASE ("-h")
-            CALL help_msg()
-        case ("--version")
-            CALL version_msg()
-        CASE ("-v")
+        case ("--version", "-v")
             CALL version_msg()
         end select
     end do
@@ -138,6 +135,7 @@ FUNCTION get_n_lines(filename) RESULT(nlines)
 
 END FUNCTION
 
+! Get the number part of the file names.
 subroutine get_digits(filename, num)
     implicit none
     ! IN:
@@ -180,17 +178,25 @@ end subroutine get_digits
 
 SUBROUTINE help_msg()
 
-print *,    "Example usage: './polikit -f abc.xyz -p 1 -r 2.32 -c pt -o ntpl'       (for single file analysis)"
-print *,    "               './polikit -d xyzfiles 10 -p 1 -r 2.32 -c pt -o ntpl'   (for multi file analysis)"
-print *,    "   -f [string]        File name, which the data will be loaded from, incompatible with '-d' option."
-print *,    "   -d [string] [int]  Directory name and interval in dynamic analysis. Files in the directory will "
-print *,    "                      be handled one by one, incompatible with '-f' option."
-print *,    "   -r [float]         The cutoff value."
-print *,    "   -p [1 .or. 0]      Whether periodic boundary condition is considered."
-print *,    "   -c [string]        Analyzing options. 'p' - polyhedral analysis; 't' - tct analysis; 'r' - ring"
-print *,    "                      statistics analysis; 'b' - bond angle distribution; 'g' - radial distribution function."
-print *,    "   -o [string]        Atomic output options, won't dump atomic file if not set. 'n' - atomic coordination;"
-print *,    "                        't' - tct results; 'p' - poly. neighbor; 'l' - linked state."
+print *, " Example usage: './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c p'   (polyhedral analysis)"
+print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c b'   (bond angle analysis)"
+print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 10 -c g'     (radial distribution)"
+print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 5 -c w'      (Wendt-Abraham parameter)"
+print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c h'    (Honeycutt-Anderson parameters)"
+print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c r'    (ring statistics analysis)"
+print *, "                './src/polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p'       (dynamic neighbor change)"
+print *, " Variables:   "
+print *, "   -f [string]        File name, supports .xyz, .dump, .data formats, incompatible with '-d' option."
+print *, "                      Also be careful to match the data in each colume."
+print *, "   -d [string] [int]  Directory name and interval in dynamic analysis. Interval 0 will just perform  "
+print *, "                      static analysis without comparing. Incompatible with '-f' option."
+print *, "   -r [float]         The cutoff value."
+print *, "   -p [1 .or. 0]      Whether periodic boundary condition is activated."
+print *, "   -c [string]        Analyzing options. 'p' - polyhedral analysis; 't' - tct analysis; 'r' - ring"
+print *, "                      statistics analysis; 'b' - bond angle distribution; 'g' - radial distribution function."
+print *, "                      'w' - WA parameter; 'h' - HA parameter."
+! print *, "   -o [string]        Atomic output options, won't dump atomic file if not set. 'n' - atomic coordination;"
+! print *, "                        't' - tct results; 'p' - poly. neighbor; 'l' - linked state."
 
 END SUBROUTINE
 
@@ -198,7 +204,7 @@ SUBROUTINE version_msg()
 
 print *,    "Polikit - Atomistic Simulation Analysis Tool"
 print *,    "    V0.3"
-print *,    "Bug report: zjh263@126.com"
+print *,    "Bug report: zjh239@foxmail.com"
 
 END SUBROUTINE
 

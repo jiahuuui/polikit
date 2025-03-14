@@ -55,6 +55,10 @@ SUBROUTINE rsa_simple()     ! Ring statistics analysis simple
 
     call print_ringno(ringList(:ringlist_size)%l)
 
+!     do atom = 1, ringlist_size
+!         print '(I0, *(2x,I0))', atom, ringList(atom)%element
+!     end do
+
     print *, 'Crude ring number found:', crude_ring_num
 
 END SUBROUTINE rsa_simple
@@ -174,8 +178,9 @@ SUBROUTINE find_rings(pathlist, mainringlist)
 
     bpoint(1) = .true.
     rma = 1
-    id  = pathlist(1,2)
+    if (mxlvl > 1) id  = pathlist(1,2)
     do row = 1, mxrow
+        if (mxlvl == 1) exit
     ! This part garantees the two paths split at the beginning.
         if (pathlist(row,2) /= id) then
             rmb = row-1
@@ -608,14 +613,13 @@ SUBROUTINE mod_pr(branch1, branch2, vis, pathlist)
         do i = 2, k
             mask1 = .true.
             mask2 = .true.
-    !         branch1(:i)
 
             do j = 2,i
                 tmp = pathlist(:,j) == branch1(j)
                 mask1 = mask1 .and. tmp
             end do
             a = k+2-i
-    !         branch2(:a)
+
             do j = 2, a
                 tmp = pathlist(:,j) == branch2(j)
                 mask2 = mask2 .and. tmp

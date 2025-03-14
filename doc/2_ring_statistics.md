@@ -36,7 +36,7 @@ However, there are still a few of paths that are not shortest paths. They are th
 
 In this step two types of rings are checked, i.e., even ring and odd ring. For an even ring, if an atom, namely *A*, appears twice or more in the same column (*n*) of the path list array, it is an even ring. For an odd ring, if atom *A* appears in column *n* and *n-1*, and correspondingly an atom *B* appears in the same row but inverse columns, it is an odd ring.
 
-From last step we know the odd ring branches should not have further elements, so we just set their visibility false to all other paths. For even rings, all the inherited branches of each of the ring branches should not form new rings, thus the corresponding section of the visibility array should be false.
+Visibility array is an important indicator in finding the rings. It has following benefits: 1. From last step we know the odd ring branches should not have further elements, so we just set their visibility false to all other paths. 2. For even rings, all the inherited branches of each of the ring branches should not form new rings, thus the corresponding section of the visibility array should be false. 3. It guarantees that every ring is formed by two distinct branches from the center atom.
 
 According to the primitive ring criteria, it is necessary that between a pair of nodes there must be two shortest paths. Therefore, from the shortest path array, the atoms that appear for more than once are considered end nodes of rings. Each ring found is further checked before recognized as a primitive ring.
 
@@ -86,3 +86,19 @@ way step 2 and 3 are merged and it is impossible to initialize the VA with known
 rings, i.e., can not avoid repetition.
 
 #### 2.2.4 Remove non-primitive rings
+
+### 2.3 Yuan & Comack's algorithm
+
+#### 2.3.1 Compute reference distance map
+
+First pick several atoms and perform Dijkstra's algorithm to get the distance from every atom to these atoms.
+
+#### 2.3.2 Find rings for each atom
+
+For each atom, first we perform Dijkstra's algorithm to give atoms within certain cutoff a distance number. Then, those atoms are checked to find the *mid-nodes*. For an odd ring, the mid-node should have one neighbor with smaller distance than the atom. For an even ring, it should have at least two neighbors that have smaller distance than it.
+
+When the mid-nodes are found, we follows the decrease of the distance to get the branches from the center node to current node. A ring can be formed for later check.
+
+#### 2.3.3 Check each ring for shortcut
+
+Every pair of atom and its corresponding mid-node on the found ring is checked to make sure there is no short-cut between them. Otherwise they are removed from the list.

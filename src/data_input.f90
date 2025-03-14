@@ -3,6 +3,7 @@
 MODULE data_input
     use precision
     use data_types
+    use parser, only: cutoff_str, cutoffs
     implicit none
     save
 
@@ -16,6 +17,8 @@ MODULE data_input
     end type
 
     integer(inp) :: natom, o_type
+    integer :: ntype    ! Number of types
+    real(dp), dimension(:), allocatable :: atom_frac
 
     type(coordinates(atom_number = :)), allocatable :: coord_data
 contains
@@ -31,6 +34,7 @@ SUBROUTINE get_data_from_file(file_name, path)
 
 !     print *, 'Reading xyz from file named ', file_name ! trim(dpath)//fname
 !     slength = len(trim(fname))
+
     ! check the format
     if (verify('xyz', file_name) == 0) then
         print *, 'File name: ', trim(file_name), '; XYZ format detected.'
@@ -45,6 +49,9 @@ SUBROUTINE get_data_from_file(file_name, path)
         print *, 'ERROR: Unknown format!'
         stop
     end if
+
+    call get_cutoff(cutoff_str)
+    print *, 'Cutoff values are:', cutoffs
 
     print *, 'Leaving get xyz subroutine ...'
 END SUBROUTINE
@@ -223,7 +230,9 @@ SUBROUTINE type_convert(charin)
 
     character(len=10), intent(in) :: charin(natom)
     character(len=10) :: typename(10)
-    integer :: ntype, i, j
+    integer :: i, j
+
+    integer :: tmp_number
 
 !     allocate(ptype(natom), STAT=ierr, ERRMSG=emsg)
 
@@ -250,16 +259,49 @@ SUBROUTINE type_convert(charin)
         print *, "Typename    Typeid    Number"
 
         o_type = 1
+        if (.not. allocated(atom_frac)) allocate(atom_frac(ntype))
+
         do i = 1, ntype
-            print "('   ', a, i0, '         ', i0)", typename(i), i, count(ptype == i)  !atomintype(i)
-            if (count(ptype==i) > count(ptype==o_type)) then
+            tmp_number = count(ptype == i)
+            atom_frac(i) = tmp_number/real(natom)
+            if (tmp_number > count(ptype==o_type)) then
                 o_type = i
             end if
+            print "('   ', a, i0, '         ', i0)", typename(i), i, tmp_number
         end do
         print *, "****************************"
+        print *, 'Oxygen type is: ', o_type, atom_frac
     end associate
 
 END SUBROUTINE
+
+subroutine get_cutoff(str_in)
+    implicit none
+    ! IN:
+    character(len=*), intent(in) :: str_in
+    ! PRIV:
+    integer :: p, k, i
+
+    if (index(str_in, ";") == 0) then
+        allocate(cutoffs(1))
+        read(str_in, *) cutoffs(1)
+    else
+        p = (ntype*(ntype+1))/2
+        allocate(cutoffs(p))
+        p = 1
+        k = 0
+        i = 1
+        do while(index(str_in(p:), ";") /= 0)
+            k = index(str_in(p:), ";") + k
+            read(str_in(p:k-1),*) cutoffs(i)
+            p = k+1
+            i = i+1
+        end do
+        read(str_in(p:),*) cutoffs(i)
+    end if
+
+
+end subroutine
 
 subroutine clean_xyz_data
     implicit none

@@ -12,7 +12,7 @@ module poly_analysis
   ! polyhedron
   type polyhedron(atom_number, capacity)
       integer, len :: atom_number, capacity
-      integer, dimension(atom_number) :: center_type = 0
+!       integer, dimension(atom_number) :: center_type = 0
       integer, dimension(atom_number) :: topo_type = 0
       integer, dimension(atom_number) :: poly_neigh_number = 0
       integer, dimension(atom_number, capacity) :: poly_list = 0
@@ -27,79 +27,91 @@ SUBROUTINE poly_neighbor()
   !
   ! This subroutine computes the neighbor number and neighbor list(poly_n, poly_list) of
   ! polyhedra from given atom neighbor number and neighbor list(ref_n, ref_list). type_x
-  ! and type_o are either 1 or 0, given by io module so that this subroutine knows the
+  ! and type_o are given by io module so that this subroutine knows the
   ! atom is which type by comparing ptype with them.
   !
   !!!!!!!!!!!!!!!!!!
   IMPLICIT NONE
-  integer(inp) :: m,n,i,j, k, same_neigh_num
-  integer(inp), pointer :: ref_n(:), ref_list(:,:)
+  integer :: m,n,i,j, k, same_neigh_num
+  integer :: neigh_1, neigh_2, id, checkid
+  integer, pointer :: ref_n(:), ref_list(:,:)
   print *, 'Polyhedral analysis subroutine ... Start'
 
-  allocate(polyhedron(atom_number = natom, capacity = 20) :: polys, STAT=ierr, ERRMSG=emsg)
+  allocate(polyhedron(atom_number = natom, capacity = 30) :: polys, STAT=ierr, ERRMSG=emsg)
 
   associate(ref_n => neigh_list%n_neighbor, ref_list => neigh_list%neighbors, &
             ln => polys%topo_type, ptype => coord_data%ptype, &
             poly_n => polys%poly_neigh_number, poly_list => polys%poly_list)
 
-  do i = 1, natom
+  ln = 0
+  poly_n = 0
+  poly_list = 0
 
-    if (ptype(i)==o_type) cycle   !oxygen is not center atom
-    do n = 1, ref_n(i)
-      if (ptype(ref_list(i,n))==o_type) then
-        do m = 1, ref_n(ref_list(i,n))
-          if (ptype(ref_list(ref_list(i,n),m))/=o_type .and. ref_list(ref_list(i,n),m)/=i) then
-            k = 1
-            do
-              if (poly_n(i)==0) then
-                poly_n(i)=poly_n(i)+1
-                poly_list(i,1)=ref_list(ref_list(i,n),m)
-                exit
-              endif
-              if (ref_list(ref_list(i,n),m)==poly_list(i,k)) exit
-              k = k + 1
-              ! print *, k
-              if (k > poly_n(i)) then
-                poly_n(i) = poly_n(i)+1
-                poly_list(i,k) = ref_list(ref_list(i,n),m)
-                if (poly_n(i) == 20) then
-                  print *, 'Warning: maximum polyhedral neighbor length reached.'
-                endif
-                exit
-              endif
-            enddo
+  do id = 1, natom
+
+    if (ptype(id)==o_type) cycle   !oxygen is not center atom
+
+    do n = 1, ref_n(id)    ! Loop over center's neighbors.
+      neigh_1 = ref_list(id, n)
+
+      if (ptype(neigh_1)==o_type) then
+        do m = 1, ref_n(neigh_1)    ! Loop over center's oxygen neighbor's neighbors.
+          neigh_2 = ref_list(neigh_1, m)
+
+          if (ptype(neigh_2) /= o_type .and. neigh_2 /= id) then
+            ! Insert it to poly neighbor list if it does not exist.
+            if (poly_n(id)==0) then
+              poly_n(id) = 1
+              poly_list(id,1) = neigh_2
+            else
+              do k = 1, poly_n(id)
+                if (neigh_2 == poly_list(id,k)) then
+                  exit
+                else if (k == poly_n(id)) then
+                  poly_n(id) = poly_n(id)+1
+                  poly_list(id, poly_n(id)) = neigh_2
+                  if (poly_n(id) == 30) then
+                    print *, 'Warning: maximum polyhedral neighbor length reached.'
+                  endif
+                  exit
+                end if
+              end do
+            end if
+
           endif
         enddo
       endif
     enddo
 
-    call bubble_sort(poly_n(i), poly_list(i,:))
+    call bubble_sort(poly_n(id), poly_list(id,:))
 
   enddo
 
 ! Check the neighbor list and count number of shared neighbor atom.
-  do i = 1,natom
+  do id = 1,natom
 
-    if (poly_n(i)/=0) then
-      do j =1, poly_n(i)
+    if (poly_n(id) /= 0) then
+      do j = 1, poly_n(id)
+        checkid = poly_list(id,j)
+
         same_neigh_num = 0
         m=1
         n=1
-      do while(m <= ref_n(i) .and. n <= ref_n(poly_list(i,j)) )
+        do while(m <= ref_n(id) .and. n <= ref_n(checkid))
   !       print *, m, n
-            if (ref_list(i,m) > ref_list(poly_list(i,j),n)) then
+            if (ref_list(id,m) > ref_list(checkid, n)) then
               n = n + 1
-            else if (ref_list(i,m) < ref_list(poly_list(i,j),n)) then
+            else if (ref_list(id,m) < ref_list(checkid, n)) then
               m = m + 1
-            else if (ref_list(i,m) == ref_list(poly_list(i,j),n)) then
+            else if (ref_list(id,m) == ref_list(checkid, n)) then
               m = m + 1
               n = n + 1
               same_neigh_num = same_neigh_num + 1
             endif
         enddo
 
-        if (ln(i)< same_neigh_num) then
-          ln(i)= same_neigh_num
+        if (ln(id)< same_neigh_num) then
+          ln(id)= same_neigh_num
         endif
       enddo
     endif
@@ -108,13 +120,11 @@ SUBROUTINE poly_neighbor()
   print *, ' ### Polyhedra Topological Analysis'
   print *, '***************************'
   print *, "|   CS   |   ES   |   FS   |"
-  print 138, ' | ', count(ln==1), count(ln==2), count(ln==3)
+  print 138, 'p| ', count(ln==1), count(ln==2), count(ln==3)
   print *, '***************************'
   print *, 'Polyhedral analysis ... Done'
 
   end associate
-
-
 
 138 format (a3,*(i6, ' | '))
 
@@ -302,5 +312,11 @@ end subroutine ln_change
 !   end do
 !
 ! end subroutine flexible
+
+subroutine clean_poly()
+
+  if (allocated(polys)) deallocate(polys)
+
+end subroutine clean_poly
 
 end module poly_analysis

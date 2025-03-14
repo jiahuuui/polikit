@@ -1,20 +1,28 @@
 ## 0. Plans and Logs
 
-### 0.1 Logs
+### Logs
 
-- *2025 Feb.* Wendt-Abraham parameter and Honeycutt-Anderson parameters calculation are added, they can be used to calculate Tg, or perform short-range order analysis of the amorphous glass structure.
+*2025 Mar.*
+
+- We found that when performing analysis on a series of large files, the memory usage keeps increasing and will make the system to kill the program at the end. We figured out this is because of using of allocatable parameterized derived data type in the code, specifically, the bin structure constructing part. This is more about the compiler support insufficiency, but we have to change that part back to conventional allocatable array to fix this problem.
+
+*2025 Feb.*
+
+- Wendt-Abraham parameter and Honeycutt-Anderson parameters calculation are added, they can be used to calculate Tg, or perform short-range order analysis of the amorphous glass structure.
 
 - *About r_cut and bin size* Because neighbor list construction and RDF analysis usually need very different bin capacity, I used an empirical formula to assign the bin capacity, which is `bin_cap = r_cut^3 * A`. Here `A` is an amplifier. We know the atomic density of alumina or galia is around 90/nm^3, so in average there can be `r_cut^3 * 90` atoms in a bin. For safety, we can have a constant factor of 20 for each bin, gives `r_cut^3 * 90 * 2` which can be used as bin_cap. But here the unit of `r_cut` is Angstrom not nm, by simplify and some approximation, we have `A = 2`, and the bin_cap is set as `bin_cap = r_cut^3 * 2`
 
-- *About .xyz filetype* Data in each colume must be specified before analysis. Maybe a `.json` or `.toml` file is really needed to specify everything.
+*2024 Dec.*
 
-- *2024 Dec.* The RDF analysis can be performed now. The compute option is `g`, which means *g(r)* analysis. `.dump` and `.data` file can be read now.
+- The RDF analysis can be performed now. The compute option is `g`, which means *g(r)* analysis. `.dump` and `.data` file can be read now.
 
-### 0.2 Plans
+### Plans
 
-1. Pair-wise rdf. Structure factor S(k)
+- Structure factor S(k)
 
-2. More flexible xyz/dump/data file import.
+1. ~Pair-wise cutoff in neighbor list construction, and pair-wise coordination analysis.~
+
+2. More flexible xyz/dump/data file import. Data in each colume must be specified before analysis currently. Maybe a `.json` or `.toml` file is really needed to specify everything.
 
 - set dump option, so that data, e.g., RDF can be dumped to external file.
 
@@ -24,7 +32,7 @@
 
 ~5. RSA path list build part optimization.~ Results show that there is no great difference, unlike the main ring list part. It is actually more important to optimize the algorithm of 'find rings' part.
 
-6. RSA further analysis of the results, like how to modify the ring.
+6. RSA further analysis of the results, like how to modify the ring. RSA based on other ring types, such as shortest-path rings.
 
 - set the branch length parameter from CLI.
 

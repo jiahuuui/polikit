@@ -15,6 +15,8 @@ program main
     use omp_lib
     implicit none
 ! computing options
+    logical :: flag_test = .false.
+
     LOGICAL :: flag_nf = .false.    ! neighbor finder flag.
     LOGICAL :: flag_nfd = .false.
     logical :: flag_poly = .false.  ! poly_analysis flag.
@@ -37,16 +39,13 @@ program main
     character(len=1) :: c_slice, o_slice
 
     real :: start, finish
-! we have integer type linked list and real type linked list, they are used in tct or
-! momentary d2min analysis when analysis results in a certain range need to be stored
-! and the head and tail elements are the ones compared.
 
 !     !$OMP PARALLEL
 !         PRINT*, "Hello from thread", OMP_GET_THREAD_NUM()
 !     !$OMP END PARALLEL
 
     call cpu_time(start)
-        ! put code to test here
+        ! put test code here
 
     call get_input_options() ! get the command line input strings
 
@@ -88,6 +87,9 @@ program main
         flag_nf = .true.
         flag_ha = .true.
     end if
+    if (verify('x', coption) == 0) THEN
+        flag_test = .true.
+    end if
 
     olength = len(trim(doption))
     if(olength /= 0) then
@@ -106,18 +108,30 @@ program main
         END IF
     end if
 
-    if (static .eqv. .true.) then
+    if (flag_test .eqv. .true.) then
+        print *, 'Performing test module ...'
+        call test_run()
+
+        call cpu_time(finish)
+        print '("Wall time = ",f7.2," seconds.")', finish-start
+    else if (static .eqv. .true.) then
         print *, "Starting static analysis ..."
         call static_analysis()
+
+        call cpu_time(finish)
+        print '("Wall time = ",f7.2," seconds.")', finish-start
     else
-        print *, "Starting dynamic analysis ..."
+
         call dynamic()
+
+        call cpu_time(finish)
+        if (finish-start>0.01) &
+        print '("Wall time = ",f7.2," seconds.")', finish-start
 !         print *, 'dynamic analysis report error'
 !         print *, (interval < 0), (flag_nc .eqv. .true.)
 !         stop
     end if
-    call cpu_time(finish)
-    print '("Wall time = ",f7.2," seconds.")', finish-start
+
 contains
 
 subroutine static_analysis()
@@ -125,9 +139,9 @@ subroutine static_analysis()
 
     CALL get_data_from_file(file_name, path)
 
-    if (flag_nf)  call find_neighbors() ! if (flag_nf)  call neighbor_finder_old
+    if (flag_nf .or. flag_nfd)  call find_neighbors(flag_nfd) ! if (flag_nf)  call neighbor_finder_old
 
-    if (flag_nfd) call find_neighbors_d()
+!     if (flag_nfd) call find_neighbors_d()
 
     if (flag_rdf) call calculate_rdf()
 
@@ -167,6 +181,8 @@ SUBROUTINE dynamic()
 
 !     print *, fnumber
     do fcounter = 1, fnumber
+
+        if (fcounter == 1) print *, "Starting dynamic analysis ..."
 
         file_name = trim(fnames(fcounter))
         print *, 'Performing dynamic analysis on ', trim(file_name)
@@ -276,6 +292,31 @@ subroutine compare_neighbor()
     print *, cn_increase, cn_decrease, cn_changed
 end subroutine compare_neighbor
 
+subroutine test_run()
+    implicit none
+    ! This code is for abnormal memory cost test, modify if needed.
+    integer :: fcounter
+
+!     print *, fnumber
+    do fcounter = 1, 100
+
+        print *, 'Performing dynamic analysis on ', trim(file_name)
+
+        call static_analysis()
+
+        if (frame_interval /= 0) then
+            call collect_data()
+
+            call compare_data()
+        end if
+
+        call mem_clean()
+
+        print *, '---------------------------End of Frame-----------------------------'
+    end do
+
+end subroutine test_run
+
 subroutine mem_clean
     implicit none
 
@@ -288,10 +329,16 @@ subroutine mem_clean
 
 !     if (allocated(constrain))   deallocate(constrain)
 
-    if (flag_nf .or. flag_nfd)    call clean_neighbor
-    if (flag_rdf .or. flag_wa)   call clean_rdf
+    if (flag_nf .or. flag_nfd)    call clean_neighbor()
 
-    call clean_xyz_data
+    if (flag_rdf .or. flag_wa) then
+        call clean_bins()
+        call clean_rdf()
+    end if
+
+    if (flag_poly) call clean_poly()
+
+    call clean_xyz_data()
 
 end subroutine
 
