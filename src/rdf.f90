@@ -45,8 +45,9 @@ subroutine get_rdf()
     atom_density = natom / (coord_data%lx * coord_data%ly * coord_data%lz)
 
     call create_bins(cutoff, xbin_max, ybin_max, zbin_max)
-
+!$omp parallel do
     do xbin = 1, xbin_max
+!     PRINT*, "Hello from thread", xbin, OMP_GET_THREAD_NUM()
     do ybin = 1, ybin_max
     do zbin = 1, zbin_max
         do atom = 1, cells_n(xbin, ybin, zbin)
@@ -66,6 +67,7 @@ subroutine get_rdf()
                     type2 = coord_data%ptype(checkid)
 
                     if (checkid < id) then   !to avoid repeat calculation
+
                         d = (xyz(checkid,1) - x_pbc*coord_data%lx - xyz(id,1))**2& !x
                         + (xyz(checkid,2) - y_pbc*coord_data%ly - xyz(id,2))**2& !y
                         + (xyz(checkid,3) - z_pbc*coord_data%lz - xyz(id,3))**2  !z
@@ -73,6 +75,7 @@ subroutine get_rdf()
                         if (d < r) then
                             call push_to_histbin(type1, type2, sqrt(d))
                         endif
+
                     endif
                 end do
 
@@ -86,6 +89,7 @@ subroutine get_rdf()
     end do
     end do
     end do
+!$omp end parallel do
 
     k = 1+ntype*(ntype+1)/2
 

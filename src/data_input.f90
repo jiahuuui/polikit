@@ -66,7 +66,12 @@ SUBROUTINE read_xyz_file(file_name, path)
     character(len=10), allocatable :: typechar(:)
 
     open (unit=20, file=trim(path)//file_name, status='old', iostat=ierr, iomsg=emsg)
-    if (ierr /=0) print *, emsg
+
+    if (ierr /=0) then
+        print *, emsg
+        stop
+    end if
+
     read (20,*, iostat=ierr) natom
     print *, natom," atoms read from ", trim(file_name)
     read (20,*, iostat=ierr)
@@ -143,12 +148,7 @@ SUBROUTINE read_dump_file(file_name, path)
     associate(xyz => coord_data%coord)
 
         do i = 1, natom
-!             read (20,*, iostat=ierr) xyz(i,1), xyz(i,2), xyz(i,3), typechar(i), id
             read (20,*, iostat=ierr) id, typechar(i), xyz(i,1), xyz(i,2), xyz(i,3)
-!             typechar(id) = tmptype
-!             xyz(id,1) = tmp_x
-!             xyz(id,2) = tmp_y
-!             xyz(id,3) = tmp_z
         end do
     end associate
 
@@ -270,7 +270,7 @@ SUBROUTINE type_convert(charin)
             print "('   ', a, i0, '         ', i0)", typename(i), i, tmp_number
         end do
         print *, "****************************"
-        print *, 'Oxygen type is: ', o_type, atom_frac
+        print *, 'Oxygen type is: ', o_type !, atom_frac
     end associate
 
 END SUBROUTINE
@@ -282,17 +282,17 @@ subroutine get_cutoff(str_in)
     ! PRIV:
     integer :: p, k, i
 
-    if (index(str_in, ";") == 0) then
-        allocate(cutoffs(1))
+    if (index(str_in, ",") == 0) then
+        if (.not. allocated(cutoffs)) allocate(cutoffs(1))
         read(str_in, *) cutoffs(1)
     else
         p = (ntype*(ntype+1))/2
-        allocate(cutoffs(p))
+        if (.not. allocated(cutoffs)) allocate(cutoffs(p))
         p = 1
         k = 0
         i = 1
-        do while(index(str_in(p:), ";") /= 0)
-            k = index(str_in(p:), ";") + k
+        do while(index(str_in(p:), ",") /= 0)
+            k = index(str_in(p:), ",") + k
             read(str_in(p:k-1),*) cutoffs(i)
             p = k+1
             i = i+1

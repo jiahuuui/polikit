@@ -1,6 +1,8 @@
 module neighbor_finder
+  use omp_lib
   use precision
   use data_types
+  use stdlib_array
   use parser, only: cutoffs, pbc
   use data_input, only: coord_data, natom, ntype
 
@@ -27,6 +29,10 @@ module neighbor_finder
 
   integer, dimension(:,:,:), allocatable :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
   integer, dimension(:,:,:,:), allocatable :: cells_ids
+
+  integer, dimension(:,:), allocatable :: n_by_type
+
+  integer, save :: n_cap
 
   contains
 
@@ -81,8 +87,8 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
   cells_zpbc = 0
   cells_ids = 0
 
+!$omp parallel do REDUCTION(+:cells_n) PRIVATE(atom)
   do atom = 1, natom
-
     xbin = CEILING(realxyz(atom, 1)/rCut)
     ybin = CEILING(realxyz(atom, 2)/rCut)
     zbin = CEILING(realxyz(atom, 3)/rCut)
@@ -102,6 +108,7 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
     cells_ids(xbin,ybin,zbin,cells_n(xbin,ybin,zbin)) = atom
 
   end do
+!$omp end parallel do
 
   if (pbc == 1) then
     do xbin = 0, xbin_max + 1
@@ -132,20 +139,18 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
 
 END SUBROUTINE create_bins
 
-SUBROUTINE find_neighbors(flag_delta)
+SUBROUTINE find_neighbors()
   IMPLICIT NONE
   ! IN:
-  logical, intent(in) :: flag_delta
   !
   integer :: xbin_max, ybin_max, zbin_max
   integer :: xbin, ybin, zbin, atom, atom2, i, p, q, o
   integer :: id, checkid, type1, type2
   real(dp) :: d, x_tmp, y_tmp, z_tmp
-!   real(dp) :: r
 
   real(dp), allocatable :: r(:,:)
 
-  allocate(r(ntype, ntype))
+  if (.not. allocated(r)) allocate(r(ntype, ntype))
 
   if (size(cutoffs) == 1) then
     r = cutoffs(1)
@@ -160,24 +165,25 @@ SUBROUTINE find_neighbors(flag_delta)
     end do
   end if
 
-  r = r**2
-  d = maxval(r(:,:))
+  n_cap = maxval(r)**3
+  print *, 'Capacity of neighbor list is set to: ', n_cap
 
-  call create_bins(d, xbin_max, ybin_max, zbin_max)
-
-  if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = 10) :: neigh_list)
+  if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = n_cap) :: neigh_list)
   print *, 'Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)
   neigh_list%n_neighbor = 0
   neigh_list%neighbors = 0
 
-  if ((.not. allocated(delta)) .and. flag_delta) then
-    allocate(delta(natom, 10, 3), STAT=ierr, ERRMSG=emsg)
-    delta = 0.
-    print *, 'Constructing delta array, memory cost: ', sizeof(delta)
-  end if
+  if (.not. allocated(n_by_type)) allocate(n_by_type(natom, ntype))
+  n_by_type = 0
+
+  d = maxval(r(:,:))
+  r = r**2
+
+  call create_bins(d, xbin_max, ybin_max, zbin_max)
 
   associate(xyz => coord_data%coord, n_neighbor => neigh_list%n_neighbor, neighbor => neigh_list%neighbors)
 
+!$omp parallel do
   do xbin = 1, xbin_max
   do ybin = 1, ybin_max
   do zbin = 1, zbin_max
@@ -206,9 +212,9 @@ SUBROUTINE find_neighbors(flag_delta)
               y_tmp = xyz(checkid,2) - y_pbc*coord_data%ly
               z_tmp = xyz(checkid,3) - z_pbc*coord_data%lz
 
-              d = (x_tmp - xyz(id,1))**2& !x
-                    +(y_tmp - xyz(id,2))**2& !y
-                    +(z_tmp - xyz(id,3))**2  !z
+              d = (x_tmp - xyz(id,1))**2&     !x
+                    +(y_tmp - xyz(id,2))**2&  !y
+                    +(z_tmp - xyz(id,3))**2   !z
 
               if (d < r(type1, type2)) then
                 n_neighbor(checkid) = n_neighbor(checkid) + 1
@@ -216,15 +222,9 @@ SUBROUTINE find_neighbors(flag_delta)
                 neighbor(checkid, n_neighbor(checkid)) = id
                 neighbor(id, n_neighbor(id)) = checkid
 
-                if (flag_delta) then
-                delta(id,n_neighbor(id),1) = x_tmp - xyz(id,1)
-                delta(id,n_neighbor(id),2) = y_tmp - xyz(id,2)
-                delta(id,n_neighbor(id),3) = z_tmp - xyz(id,3)
+                n_by_type(id, coord_data%ptype(checkid)) = n_by_type(id, coord_data%ptype(checkid))+1
+                n_by_type(checkid, coord_data%ptype(id)) = n_by_type(checkid, coord_data%ptype(id))+1
 
-                delta(checkid,n_neighbor(checkid),1) = xyz(id,1) - x_tmp
-                delta(checkid,n_neighbor(checkid),2) = xyz(id,2) - y_tmp
-                delta(checkid,n_neighbor(checkid),3) = xyz(id,3) - z_tmp
-                end if
               endif
             endif
           end do
@@ -239,43 +239,192 @@ SUBROUTINE find_neighbors(flag_delta)
   end do
   end do
   end do
-
+!$omp end parallel do
   call print_cn
 
+!!$omp parallel do
     do i = 1, natom
       call bubble_sort(n_neighbor(i), neighbor(i,:))
     enddo
-
+!!$omp end parallel do
   end associate
 
 END SUBROUTINE find_neighbors
 
+SUBROUTINE find_neighbors_d(flag_d2min)
+  IMPLICIT NONE
+  ! IN:
+  logical, intent(in) :: flag_d2min
+  !
+  integer :: xbin_max, ybin_max, zbin_max
+  integer :: xbin, ybin, zbin, atom, atom2, i, p, q, o
+  integer :: id, checkid, type1, type2
+  real(dp) :: d, x_tmp, y_tmp, z_tmp
+
+  real(dp), allocatable :: r(:,:)
+
+  if (.not. allocated(r)) allocate(r(ntype, ntype))
+
+  if (size(cutoffs) == 1) then
+    r = cutoffs(1)
+  else
+    i = 1
+    do p = 1, ntype
+      do q = p, ntype
+        r(p,q) = cutoffs(i)
+        r(q,p) = cutoffs(i)
+        i = i+1
+      end do
+    end do
+  end if
+
+  n_cap = maxval(r)**3
+  print *, 'Capacity of neighbor list is set to: ', n_cap
+
+  if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = n_cap) :: neigh_list)
+  print *, 'Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)
+  neigh_list%n_neighbor = 0
+  neigh_list%neighbors = 0
+
+  if ((.not. allocated(delta))) then
+    allocate(delta(natom, n_cap, 3), STAT=ierr, ERRMSG=emsg)
+    delta = 0.
+    print *, 'Constructing delta array, memory cost: ', sizeof(delta)
+  end if
+
+  if (.not. allocated(n_by_type)) allocate(n_by_type(natom, ntype))
+  n_by_type = 0
+
+  d = maxval(r(:,:))
+  r = r**2
+
+  call create_bins(d, xbin_max, ybin_max, zbin_max)
+
+  associate(xyz => coord_data%coord, n_neighbor => neigh_list%n_neighbor, neighbor => neigh_list%neighbors)
+
+!$omp parallel do
+  do xbin = 1, xbin_max
+  do ybin = 1, ybin_max
+  do zbin = 1, zbin_max
+
+      do atom = 1, cells_n(xbin, ybin, zbin)
+        id = cells_ids(xbin, ybin, zbin, atom)
+        type1 = coord_data%ptype(id)
+
+        do p = -1, 1
+        do q = -1, 1
+        do o = -1, 1
+
+        associate(checked_n => cells_n(xbin+p, ybin+q, zbin+o),&
+                  checked_ids => cells_ids(xbin+p, ybin+q, zbin+o, :),&
+                  x_pbc => cells_xpbc(xbin+p, ybin+q, zbin+o), &
+                  y_pbc => cells_ypbc(xbin+p, ybin+q, zbin+o), &
+                  z_pbc => cells_zpbc(xbin+p, ybin+q, zbin+o))
+
+          do atom2 = 1, checked_n
+            checkid = checked_ids(atom2)
+            type2 = coord_data%ptype(checkid)
+
+            if (checkid < id) then   !to avoid repeat calculation
+
+              x_tmp = xyz(checkid,1) - x_pbc*coord_data%lx
+              y_tmp = xyz(checkid,2) - y_pbc*coord_data%ly
+              z_tmp = xyz(checkid,3) - z_pbc*coord_data%lz
+
+              d = (x_tmp - xyz(id,1))**2&     !x
+                    +(y_tmp - xyz(id,2))**2&  !y
+                    +(z_tmp - xyz(id,3))**2   !z
+
+              if (d < r(type1, type2)) then
+                n_neighbor(checkid) = n_neighbor(checkid) + 1
+                n_neighbor(id) = n_neighbor(id) + 1
+                neighbor(checkid, n_neighbor(checkid)) = id
+                neighbor(id, n_neighbor(id)) = checkid
+
+                n_by_type(id, coord_data%ptype(checkid)) = n_by_type(id, coord_data%ptype(checkid))+1
+                n_by_type(checkid, coord_data%ptype(id)) = n_by_type(checkid, coord_data%ptype(id))+1
+
+                delta(id,n_neighbor(id),1) = x_tmp - xyz(id,1)
+                delta(id,n_neighbor(id),2) = y_tmp - xyz(id,2)
+                delta(id,n_neighbor(id),3) = z_tmp - xyz(id,3)
+
+                delta(checkid,n_neighbor(checkid),1) = xyz(id,1) - x_tmp
+                delta(checkid,n_neighbor(checkid),2) = xyz(id,2) - y_tmp
+                delta(checkid,n_neighbor(checkid),3) = xyz(id,3) - z_tmp
+              endif
+            endif
+          end do
+
+        end associate
+
+        end do
+        end do
+        end do
+      end do
+
+  end do
+  end do
+  end do
+!$omp end parallel do
+  call print_cn
+
+  if (.not. flag_d2min) then
+  do i = 1, natom
+    call bubble_sort(n_neighbor(i), neighbor(i,:))
+  enddo
+  end if
+! Note that when dumping the delta, the neighbor list is not sorted.
+
+  end associate
+
+END SUBROUTINE find_neighbors_d
+
 subroutine print_cn()
   implicit none
+  integer :: i, j
+  character(len=11) :: title
+
+  print *, ' ### Coordination Distribution'
+  print *, '***************************'
+
+  call print_hist(neigh_list%n_neighbor,'c| Count | ')
+
+  do i = 1, ntype
+    do j = 1, ntype
+      write (title, "(A4,I1,a1,i1,a4)") ' |  ',i,'-',j,'  | '
+      call print_hist(n_by_type(trueloc(coord_data%ptype==j),i) , title)
+    end do
+  end do
+  print *, '***************************'
+
+end subroutine print_cn
+
+subroutine print_hist(alist, title)
+  implicit none
+  ! IN:
+  integer, intent(in) :: alist(:)
+  character(len=*), intent(in) :: title
+  ! PRIV:
   integer :: maxn, i
   integer, allocatable :: rank(:), amount(:)
 
-  associate(n_neighbor => neigh_list%n_neighbor)
-    maxn = maxval(n_neighbor)
+    maxn = maxval(alist)
 
-    if (maxn > 12) maxn = 12
+    if (maxn > 16) maxn = 16
 
     allocate(rank(0:maxn), amount(0:maxn))
 
     rank = [(i, i=0, maxn)]
     do i = 0, maxn
-      amount(i) = count(n_neighbor == i)
+      amount(i) = count(alist == i)
     end do
 
-    print *, ' ### Coordination Distribution'
-    print *, '***************************'
-    print 117, ' | CN    | ',rank
-    print 117, 'c| Count | ',amount
-    print *, '***************************'
+    if (verify('Count',title)==0) print 117, ' | CN    | ',rank
+    print 117, title,amount
+
     117 format (a11,*(i6, ' | '))
 
-  end associate
-end subroutine print_cn
+end subroutine print_hist
 
 subroutine clean_bins()
   implicit none
@@ -299,6 +448,7 @@ subroutine clean_neighbor
   end if
 
   if (allocated(delta)) delta = 0.
+  if (allocated(n_by_type)) n_by_type = 0.
 
 end subroutine clean_neighbor
 

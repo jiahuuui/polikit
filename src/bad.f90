@@ -71,9 +71,9 @@ subroutine bond_angle_distribution()
     enddo
   end associate
 
-  print *, "=========== O-X-O bond angle histgram ============"
+  print *, "b1| O-X-O bond angle histgram ===================="
     call hist_of_bad(oxo_angle, oxo_id-1)
-  print *, "=========== O-X-O bond angle histgram ============"
+  print *, "b2| X-O-X bond angle histgram ===================="
     call hist_of_bad(xox_angle, xox_id-1)
   print *, "=================================================="
 

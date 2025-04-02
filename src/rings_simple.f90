@@ -42,7 +42,7 @@ SUBROUTINE rsa_simple()     ! Ring statistics analysis simple
     tcheckpr = 0.
     taddring = 0.
 
-    maxlvl = 8
+    maxlvl = 10
     print *, 'Max branch length:', maxlvl
     allocate(ringList(ringlist_cap))
     ringList%l = 0

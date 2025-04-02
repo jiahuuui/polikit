@@ -52,6 +52,7 @@ set(SRC
     bad.f90
     dynamic_data.f90
     ha.f90
+    d2min.f90
     )
 
 add_executable(polikit ${COMPILE_OPTIONS} ${SRC})
