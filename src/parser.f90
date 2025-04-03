@@ -8,10 +8,12 @@ MODULE parser
     character(len=80) :: path, file_name   ! path that contain files, or file names
     character(len=20) :: coption, doption
     character(len=20), allocatable :: fnames(:)
-    integer :: fnumber, pbc, frame_interval
-    character(len=30) :: cutoff_str
+    integer :: fnumber, frame_interval
+    character(len=30) :: cutoff_str, pbc_str
     logical :: static
+
     real(dp), allocatable :: cutoffs(:)
+    integer :: pbcs(3)
 
 contains
 
@@ -31,11 +33,15 @@ SUBROUTINE get_input_options()
     call get_command_argument(i, args)
         select case (args)
         case ("-p")         !check if pbc is applied
-            call get_command_argument(i+1, args)
-            read (args, *) pbc
-            if (pbc == 1) print *, "Periodic boundary conditions ... True"
+            call get_command_argument(i+1, pbc_str)
+            call get_pbc(pbc_str)
+            print '(a,i2,i2,i2)', ' Periodic boundary conditions are: ', pbcs
+!             read (args, *) pbc
+!             if (pbc == 1) print *, "Periodic boundary conditions ... True"
         case ("-r")         !read cutoff distance
             call get_command_argument(i+1, cutoff_str)
+            call get_cutoff(cutoff_str)
+            print *, 'Cutoff values are:', cutoffs
 !             read (args, *) cutoff_str
         case ("-f")         !data is a single file
             static = .true.
@@ -43,7 +49,7 @@ SUBROUTINE get_input_options()
             path=''
             call get_command_argument(i+1, args)
             file_name = trim(args)
-            print *, "File name is ", file_name
+            print *, "File name is ", trim(file_name)
         case ("-d")         !data is a directory
             static = .false.
             call get_command_argument(i+1, args)
@@ -55,6 +61,7 @@ SUBROUTINE get_input_options()
             call get_command_argument(i+1, coption)
             if(len_trim(coption)==0) then
                 print *, 'Error: no argument specified for computing!'
+                stop
             end if
         case ("-o")
             call get_command_argument(i+1, doption)   ! dump option
@@ -175,6 +182,64 @@ subroutine get_digits(filename, num)
     IF (ierr /= 0) print *, 'No number found!'  ! Default if no number found
 
 end subroutine get_digits
+
+! Read pair-wise cutoffs.
+subroutine get_cutoff(str_in)
+    implicit none
+    ! IN:
+    character(len=*), intent(in) :: str_in
+    ! PRIV:
+    integer :: p, k, i, n
+
+    if (index(str_in, ",") == 0) then
+        if (.not. allocated(cutoffs)) allocate(cutoffs(1))
+        read(str_in, *) cutoffs(1)
+    else
+        do i = 1, len_trim(str_in)
+            if (str_in(i:i) == ',') then
+                n=n + 1
+            end if
+        end do
+        if (.not. allocated(cutoffs)) allocate(cutoffs(n+1))
+        p = 1
+        k = 0
+        i = 1
+        do while(index(str_in(p:), ",") /= 0)
+            k = index(str_in(p:), ",") + k
+            read(str_in(p:k-1),*) cutoffs(i)
+            p = k+1
+            i = i+1
+        end do
+        read(str_in(p:),*) cutoffs(i)
+    end if
+end subroutine get_cutoff
+
+! Read PBCs if more than 1 are given.
+subroutine get_pbc(str_in)
+    implicit none
+    ! IN:
+    character(len=*), intent(in) :: str_in
+    ! PRIV:
+    integer :: p, k, i
+
+    if (index(str_in, ",") == 0) then
+!         if (.not. allocated(pbcs)) allocate(pbcs(3))
+        read(str_in, *) pbcs(1)
+        pbcs = pbcs(1)
+    else
+!         if (.not. allocated(pbcs)) allocate(pbcs(3))
+        p = 1
+        k = 0
+        i = 1
+        do while(index(str_in(p:), ",") /= 0)
+            k = index(str_in(p:), ",") + k
+            read(str_in(p:k-1),*) pbcs(i)
+            p = k+1
+            i = i+1
+        end do
+        read(str_in(p:),*) pbcs(i)
+    end if
+end subroutine get_pbc
 
 SUBROUTINE help_msg()
 

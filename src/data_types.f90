@@ -43,47 +43,4 @@ SUBROUTINE printl(array)
     print *, '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -'
 END SUBROUTINE printl
 
-! ! Print rings.
-! SUBROUTINE printr(ringlist)
-!     IMPLICIT NONE
-!     type(ring), allocatable, intent(in) :: ringlist(:)
-!     integer :: i, l
-!     do i = 1, size(ringlist(:))
-!         l = ringlist(i)%l
-!         print *, i, '(ID) ', ringlist(i)%l, '(RSIZE) ', ringlist(i)%element(:l)
-!     end do
-!     print *, '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -'
-! END SUBROUTINE printr
-
-
-!     subroutine push_back_int()
-!         implicit none
-!
-!         allocate(tail%next, stat=ierr)
-!         tail => tail%next
-!         nullify(tail%next)
-!         tail%list = constrain(:,1)
-!         if (size(tail%list) /= ntemp) then
-!             print *, '!Error: Unmatched atom number between frames!'
-!             stop
-!         end if
-!         ntemp = natom
-!
-!     end subroutine push_back_int
-!
-!     subroutine push_back_real()
-!         implicit none
-!
-!         allocate(tail%next, stat=ierr)
-!         tail => tail%next
-!         nullify(tail%next)
-!         tail%list = constrain(:,1)
-!         if (size(tail%list) /= ntemp) then
-!             print *, '!Error: Unmatched atom number between frames!'
-!             stop
-!         end if
-!         ntemp = natom
-!
-!     end subroutine push_back_real
-
 END MODULE data_types

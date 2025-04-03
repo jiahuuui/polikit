@@ -3,7 +3,7 @@
 MODULE data_input
     use precision
     use data_types
-    use parser, only: cutoff_str, cutoffs
+    use parser, only: cutoffs, pbcs
     implicit none
     save
 
@@ -49,9 +49,6 @@ SUBROUTINE get_data_from_file(file_name, path)
         print *, 'ERROR: Unknown format!'
         stop
     end if
-
-    call get_cutoff(cutoff_str)
-    print *, 'Cutoff values are:', cutoffs
 
     print *, 'Leaving get xyz subroutine ...'
 END SUBROUTINE
@@ -274,34 +271,6 @@ SUBROUTINE type_convert(charin)
     end associate
 
 END SUBROUTINE
-
-subroutine get_cutoff(str_in)
-    implicit none
-    ! IN:
-    character(len=*), intent(in) :: str_in
-    ! PRIV:
-    integer :: p, k, i
-
-    if (index(str_in, ",") == 0) then
-        if (.not. allocated(cutoffs)) allocate(cutoffs(1))
-        read(str_in, *) cutoffs(1)
-    else
-        p = (ntype*(ntype+1))/2
-        if (.not. allocated(cutoffs)) allocate(cutoffs(p))
-        p = 1
-        k = 0
-        i = 1
-        do while(index(str_in(p:), ",") /= 0)
-            k = index(str_in(p:), ",") + k
-            read(str_in(p:k-1),*) cutoffs(i)
-            p = k+1
-            i = i+1
-        end do
-        read(str_in(p:),*) cutoffs(i)
-    end if
-
-
-end subroutine
 
 subroutine clean_xyz_data
     implicit none

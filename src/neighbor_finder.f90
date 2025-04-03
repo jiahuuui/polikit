@@ -3,7 +3,7 @@ module neighbor_finder
   use precision
   use data_types
   use stdlib_array
-  use parser, only: cutoffs, pbc
+  use parser, only: cutoffs, pbcs
   use data_input, only: coord_data, natom, ntype
 
   implicit none
@@ -80,14 +80,14 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
   allocate(cells_zpbc(0:xbin_max+1,0:ybin_max+1,0:zbin_max+1))
   allocate(cells_ids(0:xbin_max+1,0:ybin_max+1,0:zbin_max+1, bincap))
 
-  print *, 'Deviding box into bins, memory cost of bins: ', sizeof(cells_ids)
+  print '(a,i0,a)', ' Deviding box into bins, memory cost of bins: ', sizeof(cells_ids)/1024, ' KB;'
   cells_n = 0
   cells_xpbc = 0
   cells_ypbc = 0
   cells_zpbc = 0
   cells_ids = 0
 
-!$omp parallel do REDUCTION(+:cells_n) PRIVATE(atom)
+!!$omp parallel do REDUCTION(+:cells_n) PRIVATE(atom)
   do atom = 1, natom
     xbin = CEILING(realxyz(atom, 1)/rCut)
     ybin = CEILING(realxyz(atom, 2)/rCut)
@@ -108,9 +108,10 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
     cells_ids(xbin,ybin,zbin,cells_n(xbin,ybin,zbin)) = atom
 
   end do
-!$omp end parallel do
+!!$omp end parallel do
 
-  if (pbc == 1) then
+! Create periodic image on the right dimension.
+!   if (pbc == 1) then
     do xbin = 0, xbin_max + 1
     do ybin = 0, ybin_max + 1
     do zbin = 0, zbin_max + 1
@@ -119,12 +120,12 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
                 y_pbc => cells_ypbc(xbin, ybin, zbin), &
                 z_pbc => cells_zpbc(xbin, ybin, zbin))
 
-        if (xbin == 0) x_pbc = 1
-        if (xbin == xbin_max + 1) x_pbc = -1
-        if (ybin == 0) y_pbc = 1
-        if (ybin == ybin_max + 1) y_pbc = -1
-        if (zbin == 0) z_pbc = 1
-        if (zbin == zbin_max + 1) z_pbc = -1
+        if (pbcs(1) == 1 .and. xbin == 0) x_pbc = 1
+        if (pbcs(1) == 1 .and. xbin == xbin_max + 1) x_pbc = -1
+        if (pbcs(2) == 1 .and. ybin == 0) y_pbc = 1
+        if (pbcs(2) == 1 .and. ybin == ybin_max + 1) y_pbc = -1
+        if (pbcs(3) == 1 .and. zbin == 0) z_pbc = 1
+        if (pbcs(3) == 1 .and. zbin == zbin_max + 1) z_pbc = -1
         cells_n(xbin, ybin, zbin) = &
         cells_n(xbin + x_pbc*xbin_max, ybin + y_pbc*ybin_max, zbin + z_pbc*zbin_max)
         cells_ids(xbin, ybin, zbin, :) = &
@@ -133,7 +134,7 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
     end do
     end do
     end do
-  endif
+!   endif
 
   print *, 'Leaving bins construction subroutine ...'
 
@@ -169,7 +170,7 @@ SUBROUTINE find_neighbors()
   print *, 'Capacity of neighbor list is set to: ', n_cap
 
   if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = n_cap) :: neigh_list)
-  print *, 'Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)
+  print '(a,i0,a)', ' Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)/1024, ' KB;'
   neigh_list%n_neighbor = 0
   neigh_list%neighbors = 0
 
@@ -188,6 +189,7 @@ SUBROUTINE find_neighbors()
   do ybin = 1, ybin_max
   do zbin = 1, zbin_max
 
+      if (cells_n(xbin, ybin, zbin) == 0) cycle
       do atom = 1, cells_n(xbin, ybin, zbin)
         id = cells_ids(xbin, ybin, zbin, atom)
         type1 = coord_data%ptype(id)
@@ -282,14 +284,14 @@ SUBROUTINE find_neighbors_d(flag_d2min)
   print *, 'Capacity of neighbor list is set to: ', n_cap
 
   if (.not. allocated(neigh_list)) allocate(neighbor_list(atom_number = natom, capacity = n_cap) :: neigh_list)
-  print *, 'Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)
+  print '(a,i0,a)', ' Constructing neighbor list, memory cost: ', sizeof(neigh_list%neighbors)/1024, ' KB;'
   neigh_list%n_neighbor = 0
   neigh_list%neighbors = 0
 
   if ((.not. allocated(delta))) then
     allocate(delta(natom, n_cap, 3), STAT=ierr, ERRMSG=emsg)
     delta = 0.
-    print *, 'Constructing delta array, memory cost: ', sizeof(delta)
+    print '(a,i0,a)', ' Constructing delta array, memory cost: ', sizeof(delta)/1024, ' KB;'
   end if
 
   if (.not. allocated(n_by_type)) allocate(n_by_type(natom, ntype))
@@ -369,9 +371,9 @@ SUBROUTINE find_neighbors_d(flag_d2min)
   call print_cn
 
   if (.not. flag_d2min) then
-  do i = 1, natom
-    call bubble_sort(n_neighbor(i), neighbor(i,:))
-  enddo
+    do i = 1, natom
+      call bubble_sort(n_neighbor(i), neighbor(i,:))
+    enddo
   end if
 ! Note that when dumping the delta, the neighbor list is not sorted.
 

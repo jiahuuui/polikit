@@ -1,7 +1,7 @@
 module rdf
     use precision
     use data_types
-    use parser, only: cutoffs, pbc
+    use parser, only: cutoffs
     use data_input, only: coord_data, natom, ntype, atom_frac
     use neighbor_finder
 
