@@ -3,11 +3,13 @@ module d2min
   use data_input, only: natom
   use dynamic_data, only: xyz_bf, box_bf
   use neighbor_finder, only: neigh_list, delta, n_cap
-  use parser, only: frame_interval, cutoffs
+  use parser, only: frame_interval, pbcs
   implicit none
 
   real(dp), allocatable :: d2min_data(:)
   real(dp) :: tstart, tcheck, tref, ttensor, td2
+
+  real(dp) :: mean_d2min
 
   contains
 
@@ -17,11 +19,6 @@ subroutine get_d2min()
   real(dp) :: tmp(3,3), v_inv(3,3), j(3,3), v(3,3), w(3,3)
   real(dp) :: d_tmp(n_cap, 3), d_test(n_cap, 3), d_ref(n_cap, 3)
 
-!   if (frame_interval == 0) then
-!     print *, 'Cannot perform D2min analysis without interval, quit.'
-!     ! make it to constant reference.
-!     stop
-!   end if
   tref = 0.
   ttensor = 0.
   td2 = 0.
@@ -32,10 +29,7 @@ subroutine get_d2min()
   do atom = 1, natom
     n = neigh_list%n_neighbor(atom)
     associate(d_now=> delta(atom,:n,:))
-!       call cpu_time(tstart)
       d_ref = get_ref_delta(atom, neigh_list%neighbors(atom, :n))
-!       call cpu_time(tcheck)
-      tref = tref+tcheck-tstart
 
   !       d2min = (d_now - d_ref*J)^2
   !       J = (d_ref^T.d_ref)^{-1}.d_ref^T.d_now
@@ -59,9 +53,6 @@ subroutine get_d2min()
       d_tmp(:n,:) = matmul(d_ref(:n,:), j)
       d_test(:n,:) = d_now - d_tmp(:n,:)
 
-!       call cpu_time(tstart)
-      ttensor=ttensor+tstart-tcheck
-
       do i = 1, n
         d2min_data(atom) = d2min_data(atom) + norm2(d_test(i,:))**2
       end do
@@ -71,20 +62,16 @@ subroutine get_d2min()
         d2min_data(atom) = 0
       end if
 
-!       call cpu_time(tcheck)
-      td2=td2+tcheck-tstart
-
     end associate
   end do
-  print *, 'd| ', sum(d2min_data)/natom, ' is the mean value of D2min.'
+
+  mean_d2min = sum(d2min_data)/natom
+  print *, 'd| ', mean_d2min, ' is the mean value of D2min.'
 
   call hist_of_d2min(d2min_data)
 
-!   call cpu_time(tstart)
-
 !   print *, 'T_ref   T_tensor   T_d2'
 !   print *, tref, ttensor, td2, tstart-tcheck
-
 
 end subroutine get_d2min
 
@@ -170,7 +157,7 @@ pure function matdet3(A) result(det)
         + A(1,3) * (A(2,1) * A(3,2) - A(2,2) * A(3,1))
 end function matdet3
 
-! Sort the bond angles and draw histogram
+! Sort the d2min value and draw histogram
 subroutine hist_of_d2min(array_in)
   implicit none
   ! INOUT:
@@ -202,6 +189,10 @@ subroutine hist_of_d2min(array_in)
       k = k+1
       binedge = binedge + bin_size
       i = i-1
+      if (k == 400) then
+        bin(k) = natom-i
+        exit
+      end if
     end if
     i = i+1
   end do

@@ -1,7 +1,7 @@
 module rdf
     use precision
     use data_types
-    use parser, only: cutoffs
+    use parser, only: rdf_r
     use data_input, only: coord_data, natom, ntype, atom_frac
     use neighbor_finder
 
@@ -32,20 +32,23 @@ subroutine get_rdf()
     integer :: xbin, ybin, zbin, p, q, o, k
     integer :: id, checkid, type1, type2
 
+    integer, dimension(:,:,:), allocatable :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
+    integer, dimension(:,:,:,:), allocatable :: cells_ids
+
     real(dp), allocatable :: ideal_count(:)
     integer, allocatable :: sum_rdf(:)
 
     print *, "Radial distribution function calculation ... Start'"
 
-    cutoff = cutoffs(1)
+    cutoff = rdf_r
     r = cutoff**2
     bin_size = cutoff/bin_count
     call get_bin_pos(cutoff, bin_count) ! initialize bin_info, rdf_raw, rdf_data
 
     atom_density = natom / (coord_data%lx * coord_data%ly * coord_data%lz)
 
-    call create_bins(cutoff, xbin_max, ybin_max, zbin_max)
-!$omp parallel do
+    call create_bins(cutoff,cells_n, cells_xpbc, cells_ypbc, cells_zpbc, cells_ids, xbin_max, ybin_max, zbin_max)
+!!$omp parallel do default(private)
     do xbin = 1, xbin_max
 !     PRINT*, "Hello from thread", xbin, OMP_GET_THREAD_NUM()
     do ybin = 1, ybin_max
@@ -89,7 +92,7 @@ subroutine get_rdf()
     end do
     end do
     end do
-!$omp end parallel do
+!!$omp end parallel do
 
     k = 1+ntype*(ntype+1)/2
 

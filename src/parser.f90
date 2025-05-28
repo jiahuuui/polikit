@@ -2,6 +2,7 @@
 ! When performing analysis, this module is called within specific functional parts.
 MODULE parser
     use precision
+    use flags
 
     implicit none
     save
@@ -13,6 +14,8 @@ MODULE parser
     logical :: static
 
     real(dp), allocatable :: cutoffs(:)
+
+    real(dp) :: rdf_r, d2min_r
     integer :: pbcs(3)
 
 contains
@@ -21,7 +24,7 @@ SUBROUTINE get_input_options()
     IMPLICIT NONE
 !
     character(len=80) :: args
-    integer(inp) :: n, i
+    integer(inp) :: n, i, k
 
     n = iargc()
 
@@ -30,48 +33,118 @@ SUBROUTINE get_input_options()
     end if
 
     do i = 1, n
-    call get_command_argument(i, args)
+        call get_command_argument(i, args)
+
         select case (args)
+
         case ("-p")         !check if pbc is applied
             call get_command_argument(i+1, pbc_str)
             call get_pbc(pbc_str)
             print '(a,i2,i2,i2)', ' Periodic boundary conditions are: ', pbcs
-!             read (args, *) pbc
-!             if (pbc == 1) print *, "Periodic boundary conditions ... True"
-        case ("-r")         !read cutoff distance
-            call get_command_argument(i+1, cutoff_str)
-            call get_cutoff(cutoff_str)
-            print *, 'Cutoff values are:', cutoffs
-!             read (args, *) cutoff_str
-        case ("-f")         !data is a single file
+        case ("-f")
+            !data is a single file
             static = .true.
-            print *, "Performing static analysis ... True"
+            print *, "Input data is a single file ... True"
             path=''
             call get_command_argument(i+1, args)
             file_name = trim(args)
             print *, "File name is ", trim(file_name)
-        case ("-d")         !data is a directory
+        case ("-d")
+            !data is a directory
             static = .false.
+            print *, "Input data is a directory ... True"
             call get_command_argument(i+1, args)
             path = trim(args)
             call read_file_names()
-            call get_command_argument(i+2, args)
-            read (args, *) frame_interval
+        case('-os') ! offset
+            if (static .eqv. .true.) stop '--- Should not have offset in static analysis mode.'
+            call get_command_argument(i+1, args)
+            read (args, *, iostat=k) frame_interval
+            print *, 'Frame interval is ', frame_interval
         case ("-c")        !computing coption
-            call get_command_argument(i+1, coption)
-            if(len_trim(coption)==0) then
-                print *, 'Error: no argument specified for computing!'
-                stop
+                stop '--- Note: computing option is deprecated!'
+
+        case('-rdf')
+            flag_rdf = .true.
+            call get_command_argument(i+1, args)
+            read (args, *) rdf_r
+            print *, 'RDF cutoff value is:', rdf_r
+        case('-d2min')
+            flag_nfd = .true.
+            flag_d2min = .true.
+            call get_command_argument(i+1, args)
+            read (args, *) d2min_r
+            print *, 'D2min cutoff value is:', d2min_r
+        case('-bad')
+            flag_nfd = .true.
+            flag_bad = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
             end if
-        case ("-o")
-            call get_command_argument(i+1, doption)   ! dump option
-            if(len_trim(doption)==0) then
-                print *, 'Error: no argument specified for output!'
+        case('-ring')
+            flag_nf = .true.
+            flag_rstat = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
             end if
+        case('-tct')
+            flag_nfd = .true.
+            flag_tct = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
+            end if
+        case('-poly')
+            flag_nf = .true.
+            flag_poly = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
+            end if
+        case('-wa')
+            flag_wa = .true.
+            call get_command_argument(i+1, args)
+            read (args, *) rdf_r
+            print *, 'RDF cutoff value is:', rdf_r
+        case('-ha')
+            flag_nf = .true.
+            flag_ha = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
+            end if
+        case('-cluster')
+            flag_cluster = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
+            end if
+        case('-nc')
+            flag_nc=.true.
+            flag_nf = .true.
+            call get_command_argument(i+1, args)
+            if (verify('-', args) /= 0) then
+                cutoffs = get_cutoff(args)
+                print *, 'Cutoff values are:', cutoffs
+            end if
+
         case ("--help", "-h")     !help document
             call help_msg()
         case ("--version", "-v")
             CALL version_msg()
+        case default
+            if(verify('-', args) == 0) then
+                print *, '!ERROR: Input contains unknown variable: ', args
+                stop
+            end if
         end select
     end do
     return
@@ -138,7 +211,7 @@ FUNCTION get_n_lines(filename) RESULT(nlines)
         nlines = nlines+1
     enddo
     close(unit=21)
-    print '("Found ",i0," files in directory.")', nlines
+    print '(" Found ",i0," files in directory.")', nlines
 
 END FUNCTION
 
@@ -184,35 +257,39 @@ subroutine get_digits(filename, num)
 end subroutine get_digits
 
 ! Read pair-wise cutoffs.
-subroutine get_cutoff(str_in)
+function get_cutoff(str_in) result(r_list)
     implicit none
     ! IN:
     character(len=*), intent(in) :: str_in
     ! PRIV:
     integer :: p, k, i, n
+    ! out:
+    real(dp), allocatable :: r_list(:)
+
+    if (allocated(r_list)) return
 
     if (index(str_in, ",") == 0) then
-        if (.not. allocated(cutoffs)) allocate(cutoffs(1))
-        read(str_in, *) cutoffs(1)
+        allocate(r_list(1))
+        read(str_in, *) r_list(1)
     else
         do i = 1, len_trim(str_in)
             if (str_in(i:i) == ',') then
                 n=n + 1
             end if
         end do
-        if (.not. allocated(cutoffs)) allocate(cutoffs(n+1))
+        allocate(r_list(n+1))
         p = 1
         k = 0
         i = 1
         do while(index(str_in(p:), ",") /= 0)
             k = index(str_in(p:), ",") + k
-            read(str_in(p:k-1),*) cutoffs(i)
+            read(str_in(p:k-1),*) r_list(i)
             p = k+1
             i = i+1
         end do
-        read(str_in(p:),*) cutoffs(i)
+        read(str_in(p:),*) r_list(i)
     end if
-end subroutine get_cutoff
+end function get_cutoff
 
 ! Read PBCs if more than 1 are given.
 subroutine get_pbc(str_in)
@@ -243,23 +320,23 @@ end subroutine get_pbc
 
 SUBROUTINE help_msg()
 
-print *, " Example usage: './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c p'   (polyhedral analysis)"
-print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c b'   (bond angle analysis)"
-print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 10 -c g'     (radial distribution)"
-print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 5 -c w'      (Wendt-Abraham parameter)"
-print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c h'    (Honeycutt-Anderson parameters)"
-print *, "                './src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c r'    (ring statistics analysis)"
-print *, "                './src/polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p'       (dynamic neighbor change)"
+print *, " Example usage: './polikit -f ../test/ga2o3_test.xyz -p 1 -poly 2.3'   (polyhedral analysis)"
+print *, "                './polikit -f ../test/ga2o3_test.xyz -p 1 -bad 2.3'   (bond angle analysis)"
+print *, "                './polikit -f ../test/ga2o3_test.xyz -p 1 -rdf 10'     (radial distribution)"
+print *, "                './polikit -f ../test/ga2o3_test.xyz -p 1 -wa 5'      (Wendt-Abraham parameter)"
+print *, "                './polikit -f ../test/ga2o3_test.xyz -p 1 -ha 2.3'    (Honeycutt-Anderson parameters)"
+print *, "                './polikit -f ../test/ga2o3_test.xyz -p 1 -ring 2.3'    (ring statistics analysis)"
+print *, "                './polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p'       (dynamic neighbor change)"
 print *, " Variables:   "
-print *, "   -f [string]        File name, supports .xyz, .dump, .data formats, incompatible with '-d' option."
-print *, "                      Also be careful to match the data in each colume."
-print *, "   -d [string] [int]  Directory name and interval in dynamic analysis. Interval 0 will just perform  "
-print *, "                      static analysis without comparing. Incompatible with '-f' option."
-print *, "   -r [float]         The cutoff value."
-print *, "   -p [1 .or. 0]      Whether periodic boundary condition is activated."
-print *, "   -c [string]        Analyzing options. 'p' - polyhedral analysis; 't' - tct analysis; 'r' - ring"
-print *, "                      statistics analysis; 'b' - bond angle distribution; 'g' - radial distribution function."
-print *, "                      'w' - WA parameter; 'h' - HA parameter."
+print *, "   -f [string]     File name, supports .xyz, .dump, .data formats, incompatible with '-d' option."
+print *, "                   Also be careful to match the data in each colume."
+print *, "   -d [string]     Directory name and interval in dynamic analysis. Interval 0 will just perform  "
+print *, "                   static analysis without comparing. Incompatible with '-f' option."
+print *, "   -p [1 .or. 0]   Whether periodic boundary condition is activated."
+print *, '   -os [int]       Offset for dynamic analysis, should be used with -d.'
+print *, "   -[key] [float]  Analyzing options. 'poly' - polyhedral analysis; 'd2min' - non-affine displacement"
+print *, "                 analysis; 'ring' - ring statistics analysis; 'bad' - bond angle distribution; 'rdf' - "
+print *, "                 radial distribution function; 'wa' - WA parameter; 'ha' - HA parameter."
 ! print *, "   -o [string]        Atomic output options, won't dump atomic file if not set. 'n' - atomic coordination;"
 ! print *, "                        't' - tct results; 'p' - poly. neighbor; 'l' - linked state."
 
@@ -268,7 +345,7 @@ END SUBROUTINE
 SUBROUTINE version_msg()
 
 print *,    "Polikit - Atomistic Simulation Analysis Tool"
-print *,    "    V0.3"
+print *,    "    V0.4"
 print *,    "Bug report: zjh239@foxmail.com"
 
 END SUBROUTINE

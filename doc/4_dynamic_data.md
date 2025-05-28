@@ -20,3 +20,23 @@
     - Polyhedral neighbor change analysis;
 
     , there are two kinds of reference configurations. The first is that the reference configuration is always the first frame. The other kind is that the reference configuration has a constant interval to current frame.
+
+### Post process
+
+1. The analysis results will be all included in one log file. Therefore, some post process is inevitable. To make this step easier，different analysis results are attributed with different prefix of the line. For example, the mean d2min value in the log file starts with ' d|', so that we can get all the mean values using `grep` command as following
+```bash
+grep ' d|' out.txt > d2min.txt
+```
+
+2. A more complex situation is that some results include more than one line in the log file, e.g., the D2min distribution contains 400 lines after the title line, and the title line starts with ' d1|' which can be used as an indicator. Thus we need the following `grep` command to get all of those, and then split it into seperate files for each frame.
+```bash
+grep -A 400 ' d1|' out.txt > dis.txt
+csplit -f my_ -n 3 dis.txt '/--/' '{*}' -s -k
+```
+
+3. There is an even more complex situation actually: the results include an uncertain number of lines. The starting and ending lines of the data have special starting strings, such as ' c1|', ' c2|'. Therefore, we can use `awk` to get all the related lines to a single file, and then use `csplit` command to devide it into independent files.
+```bash
+awk '/ c1\|/  {inblock = 1}  / c2\|/ {inblock = 0}  inblock == 1'  1mi_5e8_dc.log > dc.txt
+csplit -f my_ -n 3 dc.txt '/ c1|/' '{*}' -s -k
+```
+

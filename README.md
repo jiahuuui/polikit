@@ -40,13 +40,17 @@ At the root directory of the code:
 
 1. Polyhedral analysis
 
-2. Bond angle distribution analysis
+2. Bond angle distribution
 
-3. Coordination analysis
+3. Coordination distribution/change
 
-4. Rings statistics analysis
+4. Rings statistics distribution
 
-5. RDF
+5. Radial distribution function
+
+6. Non-affine displacement
+
+7. Cluster analysis
 
 ### Analysis of a series of configurations:
 
@@ -59,52 +63,54 @@ At the root directory of the code:
 ## Usage
 For static analysis(`-f`):
 
-**`./polikit -f abc.xyz -p 1 -r 2.35 -c pbgr`**
+**`./polikit -f abc.xyz -p 1 -poly 2.3`**
 
 `-p [int]` can be 1 or 0, decides whether periodic boundary condition will be applied.
 
-`-r [float]` indicates the cutoff distance.
-
-`-c [string]` gives computing options, now the availables are: `p` - polyhedral analysis, `b` - bond angle analysis, `g` - radial distribution function, `r` - ring statistics analysis.
+`-[key] [parameter]` gives computing options and corresponding parameter. Now the availables are: `poly` - polyhedral analysis, `bad` - bond angle analysis, `rdf` - radial distribution function, `ring` - ring statistics analysis, `d2min` - non-affine displacement analysis, `cluster` - cluster analysis.
 
 For dynamic analysis(`-d`):
 
-**`./polikit -d dumpfiles 20 -p 1 -r 2.35 -c pt`**
+**`./polikit -d dumpfiles -os 3 -p 1 -d2min 4.6`**
 
 `-d` gives a directory name that contains .xyz files. 20 is the frame invertal for dynamic comparison. Other parameters work in the same way as in static analysis.
 
-`-c` available computing options in dynamic analysis are: `t` - tct analysis.
+`-os [int]` indicates the frame interval, which is applicable when frame-wise comparison is performed.
 
 ## Examples
 
 - Polyhedral analysis
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c p`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -poly 2.3`
 
 - Bond angle analysis
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.32 -c b`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -bad 2.3`
 
 - Radial distribution
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 10 -c g`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -rdf 10`
 
 - Wendt-Abraham parameter calculation
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 5 -c w`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -wa 5`
 
 - Honeycutt-Anderson parameters analysis
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c h`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -ha 2.3`
 
 - Ring statistics analysis
 
-`./src/polikit -f ../test/ga2o3_test.xyz -p 1 -r 2.3 -c r`
+`./polikit -f ../test/ga2o3_test.xyz -p 1 -ring 2.3`
 
 - Dynamic neighbor change analysis
 
-`./src/polikit -d ../test/test_dir/ 3 -p 1 -r 2.3 -c p`
+`./polikit -d ../test/test_dir/ -os 1 -p 1 -nc 2.3`
 
 - D2min analysis
 
-`./src/polikit -d ../test/test_dir/ 2 -p 1 -r 4.6 -c d`
+`./polikit -d ../test/test_dir/ -os 2 -p 1 -d2min 4.6`
+
+- D2min analysis and cluster analysis on high D2min atoms
+
+`./polikit -d ../test/test_dir/ -os 2 -p 1 -d2min 4.6 -cluster 2.3`

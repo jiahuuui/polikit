@@ -3,7 +3,7 @@ module neighbor_finder
   use precision
   use data_types
   use stdlib_array
-  use parser, only: cutoffs, pbcs
+  use parser, only: pbcs
   use data_input, only: coord_data, natom, ntype
 
   implicit none
@@ -27,9 +27,6 @@ module neighbor_finder
 
   type(neighbor_list(atom_number = :, capacity = :)), allocatable :: neigh_list
 
-  integer, dimension(:,:,:), allocatable :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
-  integer, dimension(:,:,:,:), allocatable :: cells_ids
-
   integer, dimension(:,:), allocatable :: n_by_type
 
   integer, save :: n_cap
@@ -37,12 +34,14 @@ module neighbor_finder
   contains
 
 ! Divide the simulation box into bins, and put atoms into their corresponding bins.
-SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
+SUBROUTINE create_bins(rCut, cells_n, cells_xpbc, cells_ypbc, cells_zpbc, cells_ids, xbin_max, ybin_max, zbin_max)
   IMPLICIT NONE
   ! in:
   real(dp), intent(in) :: rCut
   ! inOUT:
   integer, intent(inout) :: xbin_max, ybin_max, zbin_max
+  integer, dimension(:,:,:), allocatable, intent(inout) :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
+  integer, dimension(:,:,:,:), allocatable, intent(inout) :: cells_ids
   ! PRIVATE:
   real(dp), allocatable, dimension(:,:) :: realxyz
   REAL(dp) :: x_min, y_min, z_min
@@ -87,7 +86,7 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
   cells_zpbc = 0
   cells_ids = 0
 
-!!$omp parallel do REDUCTION(+:cells_n) PRIVATE(atom)
+!!$omp parallel do default(private) shared(cells_n, cells_ids)
   do atom = 1, natom
     xbin = CEILING(realxyz(atom, 1)/rCut)
     ybin = CEILING(realxyz(atom, 2)/rCut)
@@ -140,14 +139,18 @@ SUBROUTINE create_bins(rCut, xbin_max, ybin_max, zbin_max)
 
 END SUBROUTINE create_bins
 
-SUBROUTINE find_neighbors()
+SUBROUTINE find_neighbors(cutoffs)
   IMPLICIT NONE
   ! IN:
+  real(dp) :: cutoffs(:)
   !
   integer :: xbin_max, ybin_max, zbin_max
   integer :: xbin, ybin, zbin, atom, atom2, i, p, q, o
   integer :: id, checkid, type1, type2
   real(dp) :: d, x_tmp, y_tmp, z_tmp
+
+  integer, dimension(:,:,:), allocatable :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
+  integer, dimension(:,:,:,:), allocatable :: cells_ids
 
   real(dp), allocatable :: r(:,:)
 
@@ -180,7 +183,7 @@ SUBROUTINE find_neighbors()
   d = maxval(r(:,:))
   r = r**2
 
-  call create_bins(d, xbin_max, ybin_max, zbin_max)
+  call create_bins(d, cells_n, cells_xpbc, cells_ypbc, cells_zpbc, cells_ids, xbin_max, ybin_max, zbin_max)
 
   associate(xyz => coord_data%coord, n_neighbor => neigh_list%n_neighbor, neighbor => neigh_list%neighbors)
 
@@ -244,26 +247,31 @@ SUBROUTINE find_neighbors()
 !$omp end parallel do
   call print_cn
 
-!!$omp parallel do
     do i = 1, natom
       call bubble_sort(n_neighbor(i), neighbor(i,:))
     enddo
-!!$omp end parallel do
   end associate
 
 END SUBROUTINE find_neighbors
 
-SUBROUTINE find_neighbors_d(flag_d2min)
+SUBROUTINE find_neighbors_d(cutoffs, flag_d2min)
   IMPLICIT NONE
   ! IN:
+  real(dp) :: cutoffs(:)
   logical, intent(in) :: flag_d2min
+        ! for d2min analysis, the neighbor list won't be sorted so that neighbor id and vector match.
   !
   integer :: xbin_max, ybin_max, zbin_max
   integer :: xbin, ybin, zbin, atom, atom2, i, p, q, o
   integer :: id, checkid, type1, type2
   real(dp) :: d, x_tmp, y_tmp, z_tmp
 
+  integer, dimension(:,:,:), allocatable :: cells_n, cells_xpbc, cells_ypbc, cells_zpbc
+  integer, dimension(:,:,:,:), allocatable :: cells_ids
+
   real(dp), allocatable :: r(:,:)
+
+  print *, 'Entering neighbor list constructing function ...'
 
   if (.not. allocated(r)) allocate(r(ntype, ntype))
 
@@ -300,11 +308,11 @@ SUBROUTINE find_neighbors_d(flag_d2min)
   d = maxval(r(:,:))
   r = r**2
 
-  call create_bins(d, xbin_max, ybin_max, zbin_max)
+  call create_bins(d, cells_n, cells_xpbc, cells_ypbc, cells_zpbc, cells_ids, xbin_max, ybin_max, zbin_max)
 
   associate(xyz => coord_data%coord, n_neighbor => neigh_list%n_neighbor, neighbor => neigh_list%neighbors)
 
-!$omp parallel do
+!!$omp parallel do
   do xbin = 1, xbin_max
   do ybin = 1, ybin_max
   do zbin = 1, zbin_max
@@ -367,7 +375,7 @@ SUBROUTINE find_neighbors_d(flag_d2min)
   end do
   end do
   end do
-!$omp end parallel do
+!!$omp end parallel do
   call print_cn
 
   if (.not. flag_d2min) then
@@ -428,21 +436,8 @@ subroutine print_hist(alist, title)
 
 end subroutine print_hist
 
-subroutine clean_bins()
-  implicit none
-
-  if (allocated(cells_n)) deallocate(cells_n)
-  if (allocated(cells_xpbc)) deallocate(cells_xpbc)
-  if (allocated(cells_ypbc)) deallocate(cells_ypbc)
-  if (allocated(cells_zpbc)) deallocate(cells_zpbc)
-  if (allocated(cells_ids)) deallocate(cells_ids)
-
-end subroutine clean_bins
-
 subroutine clean_neighbor
   implicit none
-
-  call clean_bins()
 
   if (allocated(neigh_list)) then
     neigh_list%n_neighbor = 0

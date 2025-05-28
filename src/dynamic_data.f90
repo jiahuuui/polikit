@@ -1,7 +1,7 @@
+! dynamic_data.f90
 module dynamic_data
     use precision
-!     use neighbor_finder
-!     use parser
+
     implicit none
 
     real(dp), allocatable, dimension(:,:,:) :: xyz_bf
@@ -13,6 +13,8 @@ module dynamic_data
     integer, allocatable, dimension(:,:,:) :: poly_list_bf
 
     real(dp), allocatable, dimension(:,:,:,:) :: delta_bf
+
+    integer, allocatable, dimension(:,:) :: cluster_id_bf
 
 !     type(neighbor_list(atom_number = :, capacity = :)), allocatable, dimension(:) :: d_neighbors
 
